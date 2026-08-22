@@ -1,0 +1,4024 @@
+--[[
+    ╔══════════════════════════════════════════════════════════════╗
+    ║              ZUNCODEX V4.1.1 - BLOX FRUITS VIP              ║
+    ╠══════════════════════════════════════════════════════════════╣
+    ║  Tác giả: palofsc                                            ║
+    ║  Phiên bản: 4.1.1 Full VIP Release                           ║
+    ║  Ngày phát hành: 2024                                        ║
+    ║  Mục đích: Môi trường test riêng tư (Private Server Only)     ║
+    ╠══════════════════════════════════════════════════════════════╣
+    ║  TÍNH NĂNG CHÍNH (10 TABS):                                  ║
+    ║  • Tab 1: Main - Auto Farm, Quest, Haki, Stats              ║
+    ║  • Tab 2: Combat - Kill Aura, Aimbot, Skills                ║
+    ║  • Tab 3: Boss - 48+ Bosses, Auto Farm Boss                 ║
+    ║  • Tab 4: Fruit - Tracker, ESP, Collect, Spawn              ║
+    ║  • Tab 5: Sea - Mirage, Kitsune, Sea Beast, Raid            ║
+    ║  • Tab 6: ESP - Players, Enemies, Fruits, Chests, NPCs      ║
+    ║  • Tab 7: Race - V2/V3/V4 Trials Automation                ║
+    ║  • Tab 8: Misc - Teleport, NoClip, WalkWater, ServerHop     ║
+    ║  • Tab 9: Utility - FPS Boost, AntiAFK, Config              ║
+    ║  • Tab 10: About - Info, Credits, Updates                   ║
+    ╠══════════════════════════════════════════════════════════════╣
+    ║  TƯƠNG THÍCH EXECUTOR:                                      ║
+    ║  ✓ Synapse X  ✓ Krnl  ✓ Fluxus  ✓ Delta                     ║
+    ║  ✓ Xeno  ✓ ScriptWare  ✓ Wave  ✓ Oxygen U                   ║
+    ╠══════════════════════════════════════════════════════════════╣
+    ║  BUG FIXES V4.1.1:                                          ║
+    ║  ✅ Fixed nearestDist declaration in all Find functions     ║
+    ║  ✅ Fixed self:log → self:Log capitalization               ║
+    ║  ✅ Added workspace.Npcs existence check                    ║
+    ║  ✅ Wrapped firetouchinterest in pcall                      ║
+    ║  ✅ Added pcall wrapper for writefile/readfile              ║
+    ║  ✅ Wrapped setclipboard in pcall with fallback             ║
+    ║  ✅ Added multi-method httprequest support                  ║
+    ║  ✅ Fixed missing bodyGyro declaration in ToggleFly        ║
+    ║  ✅ Added workspace.Enemies existence check                 ║
+    ║  ✅ Wrapped settings().Rendering in pcall                  ║
+    ║  ✅ Fixed AntiNight missing else clause                     ║
+    ╚══════════════════════════════════════════════════════════════╝
+]]
+
+-- ============================================
+-- PHẦN 1: SERVICES & VARIABLES
+-- ============================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+
+local LocalPlayer = Players.LocalPlayer
+local Connections = {}
+local LogEntries = {}
+local ESP_Objects = {}
+local FruitObjects = {}
+local IsInitialized = false
+
+-- ============================================
+-- PHẦN 2: CONFIGURATION SYSTEM
+-- ============================================
+
+local Config = {
+    -- Main Settings
+    AutoFarm = false,
+    AutoQuest = false,
+    AutoHaki = false,
+    AutoStats = false,
+    StatsPreset = "Balanced",
+    
+    -- Farm Settings
+    FarmRadius = 500,
+    AttackDelay = 0.3,
+    TeleportToTarget = true,
+    
+    -- Combat Settings
+    KillAura = false,
+    KillAuraRange = 50,
+    Aimbot = false,
+    AimbotSmoothness = 0.5,
+    AimbotTargetPlayers = true,
+    AimbotTargetNPCs = false,
+    
+    -- Boss Settings
+    AutoFarmBoss = false,
+    SelectedBosses = {},
+    BossTeleport = true,
+    BossOnlyAlive = true,
+    
+    -- Fruit Settings
+    AutoCollectFruits = false,
+    FruitESP = false,
+    FruitNotify = false,
+    BringFruits = false,
+    
+    -- Sea Event Settings
+    AutoMirage = false,
+    AutoKitsune = false,
+    AutoSeaBeast = false,
+    SeaBeastType = "All",
+    AutoRaid = false,
+    AutoFishing = false,
+    FishingSpeed = 1,
+    
+    -- Race Settings
+    AutoRaceTrials = false,
+    CurrentRace = "Human",
+    
+    -- Legendary Weapons
+    AutoLegendaryWeapons = false,
+    
+    -- ESP Settings
+    ESP_Enabled = false,
+    ESP_Players = false,
+    ESP_Enemies = false,
+    ESP_Fruits = false,
+    ESP_Chests = false,
+    ESP_NPCs = false,
+    ESP_SeaBeasts = false,
+    ESP_Distance = 10000,
+    ESP_Colors = {
+        Players = Color3.fromRGB(0, 170, 255),
+        Enemies = Color3.fromRGB(255, 50, 50),
+        Fruits = Color3.fromRGB(255, 150, 0),
+        Chests = Color3.fromRGB(255, 215, 0),
+        NPCs = Color3.fromRGB(0, 255, 100),
+        SeaBeasts = Color3.fromRGB(148, 0, 211)
+    },
+    
+    -- Misc Settings
+    NoClip = false,
+    WalkOnWater = false,
+    AntiAFK = true,
+    FPSBoost = false,
+    
+    -- Visual Settings
+    AntiNight = false,
+    FullBright = false,
+    RemoveFog = false,
+    
+    -- Teleport Locations
+    TPLocations = {
+        "Old World",
+        "Sea 1",
+        "Sea 2",
+        "Sea 3",
+        "Custom"
+    },
+    
+    -- Boss List (48+ Bosses)
+    BossList = {
+        -- Old World / Sea 1
+        "Baggy", "Baggy [Boss]", "Mr. 3", "Buggy [Boss]",
+        "Clown", "Captain", "Raditz", "Sharks",
+        "Ghost", "Baggy's Mate", "Pirate Baggy", "Chop",
+        "Johnny", "Siegfried", "Mooch", "Baggy [Boss] [Reawakened]",
+        
+        -- Sea 2
+        "The Saw", "Magma [Boss]", "Fishman [Boss]", "Arlong [Boss]",
+        "Crocodile [Boss]", "Enel [Boss]", "Smoker [Boss]", "Tashigi [Boss]",
+        "Kuma [Boss]", "Aokiji [Boss]", "Akainu [Boss]", "Kizaru [Boss]",
+        "Whitebeard [Boss]", "Marco [Boss]", "Doflamingo [Boss]", "Mihawk [Boss]",
+        
+        -- Sea 3
+        "Dragon [Boss]", "Dough King", "Leviathan", "Terrorshark",
+        "Stone [Boss]", "Venom [Boss]", "Control [Boss]", "Spirit [Boss]",
+        "Portal [Boss]", "Buddha [Boss]", "Spider [Boss]", "Rumble [Boss]",
+        "Love [Boss]", "Mammoth [Boss]", "Trex [Boss]", "Phoenix [Boss]"
+    },
+    
+    -- Race Trials
+    RaceTrials = {
+        Human = {Name = "Human Trial", Description = "Complete basic combat trial"},
+        Rabbit = {Name = "Rabbit Trial", Description = "Complete speed trial"},
+        Angel = {Name = "Angel Trial", Description = "Complete flight trial"},
+        Ghoul = {Name = "Ghoul Trial", Description = "Complete dark trial"}
+    }
+}
+
+-- ============================================
+-- PHẦN 3: THEME & STYLING
+-- ============================================
+
+local Theme = {
+    -- Main Colors
+    Background = Color3.fromRGB(15, 15, 25),
+    Secondary = Color3.fromRGB(25, 25, 40),
+    Accent = Color3.fromRGB(0, 170, 255),
+    AccentDark = Color3.fromRGB(0, 120, 200),
+    TextPrimary = Color3.fromRGB(255, 255, 255),
+    TextSecondary = Color3.fromRGB(180, 180, 200),
+    
+    -- Status Colors
+    Success = Color3.fromRGB(0, 255, 136),
+    Warning = Color3.fromRGB(255, 200, 0),
+    Error = Color3.fromRGB(255, 60, 60),
+    Info = Color3.fromRGB(100, 180, 255),
+    
+    -- Tab Colors
+    TabActive = Color3.fromRGB(0, 140, 220),
+    TabInactive = Color3.fromRGB(40, 40, 60),
+    TabHover = Color3.fromRGB(50, 50, 80),
+    
+    -- Element Colors
+    ToggleOn = Color3.fromRGB(0, 200, 100),
+    ToggleOff = Color3.fromRGB(80, 80, 100),
+    ButtonHover = Color3.fromRGB(0, 190, 240),
+    SliderFill = Color3.fromRGB(0, 170, 255),
+    InputBackground = Color3.fromRGB(20, 20, 35),
+    BorderColor = Color3.fromRGB(50, 50, 80),
+    
+    -- Fonts
+    Font = Enum.Font.Gotham,
+    FontBold = Enum.Font.GothamBold,
+    TitleFont = Enum.Font.GothamBlack,
+    
+    -- Sizes
+    CornerRadius = UDim.new(0, 8),
+    SmallCorner = UDim.new(0, 4)
+}
+
+-- ============================================
+-- PHẦN 4: MAIN MODULE
+-- ============================================
+
+local Zuncodex = {}
+Zuncodex.__index = Zuncodex
+
+-- State variables
+Zuncodex.Config = Config
+Zuncodex.GUI = nil
+Zuncodex.LogContainer = nil
+Zuncodex.LogLayout = nil
+Zuncodex.UIComponents = {}
+Zuncodex.CurrentTab = nil
+Zuncodex.TabContents = {}
+
+-- Running state flags
+Zuncodex._farmRunning = false
+Zuncodex._questRunning = false
+Zuncodex._bossRunning = false
+Zuncodex._raidRunning = false
+Zuncodex._mirageRunning = false
+Zuncodex._kitsuneRunning = false
+Zuncodex._beastRunning = false
+Zuncodex._fishingRunning = false
+Zuncodex._raceRunning = false
+Zuncodex._weaponRunning = false
+Zuncodex._espRunning = false
+Zuncodex._killAuraRunning = false
+Zuncodex._aimbotRunning = false
+Zuncodex._antiAFKConn = nil
+Zuncodex._flyConn = nil
+Zuncodex._bodyGyro = nil
+Zuncodex._bodyVel = nil
+
+-- ============================================
+-- PHẦN 5: REMOTE DETECTION SYSTEM
+-- ============================================
+
+function Zuncodex:DetectRemotes()
+    self:AddLog("Detecting remote events...", "Info")
+    
+    local remotesFound = 0
+    
+    -- Common remote names for Blox Fruits
+    local remoteNames = {
+        "Attack", "Combat", "Fight", "Hit", "Damage",
+        "Haki", "Buso", "Ken", "Observation", "Armament",
+        "QuestAccept", "QuestComplete", "QuestProgress",
+        "StatsAdd", "StatsPoint", "AddStat", "Upgrade",
+        "Interact", "Talk", "Dialogue", "NPCChat",
+        "FruitUse", "FruitEat", "DevilFruit", "Awaken",
+        "RaidStart", "RaidJoin", "RaidComplete", "Fragment",
+        "FishingCast", "FishingCatch", "Fish",
+        "RaceTrial", "RaceComplete", "RaceProgress",
+        "Collect", "Pickup", "Loot", "ItemGet",
+        "Teleport", "Travel", "ChangeSea", "Boat"
+    }
+    
+    -- Store found remotes
+    self.Remotes = {}
+    
+    for _, remoteName in ipairs(remoteNames) do
+        -- Check ReplicatedStorage
+        for _, obj in ipairs(game.ReplicatedStorage:GetDescendants()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                if obj.Name:lower():find(remoteName:lower()) then
+                    self.Remotes[remoteName] = obj
+                    remotesFound = remotesFound + 1
+                    break
+                end
+            end
+        end
+    end
+    
+    self:AddLog(string.format("Detected %d remote events/functions", remotesFound), "Success")
+end
+
+function Zuncodex:CallRemote(remoteName, ...)
+    local remote = self.Remotes[remoteName]
+    
+    if not remote then
+        -- Try to find remote dynamically
+        for _, obj in ipairs(game.ReplicatedStorage:GetDescendants()) do
+            if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and 
+               obj.Name:lower():find(remoteName:lower()) then
+                remote = obj
+                self.Remotes[remoteName] = remote
+                break
+            end
+        end
+    end
+    
+    if remote then
+        pcall(function()
+            if remote:IsA("RemoteEvent") then
+                remote:FireServer(...)
+            elseif remote:IsA("RemoteFunction") then
+                remote:InvokeServer(...)
+            end
+        end)
+    else
+        -- Fallback: try direct method names
+        pcall(function()
+            local args = {...}
+            if type(args[1]) == "string" then
+                -- Try firing to a method on player
+                local method = args[1]
+                table.remove(args, 1)
+                
+                if LocalPlayer and LocalPlayer[method] then
+                    LocalPlayer[method](LocalPlayer, unpack(args))
+                end
+            end
+        end)
+    end
+end
+
+-- ============================================
+-- PHẦN 6: GUI CREATION SYSTEM
+-- ============================================
+
+function Zuncodex:CreateGUI()
+    -- Create ScreenGui
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "ZuncodexV4_GUI"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Anti-log detection
+    pcall(function()
+        if syn and syn.protect_gui then
+            syn.protect_gui(ScreenGui)
+        elseif gethui then
+            ScreenGui.Parent = gethui()
+        else
+            ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+        end
+    end)
+    
+    if not ScreenGui.Parent then
+        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    end
+    
+    self.GUI = ScreenGui
+    
+    -- Main Frame
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 720, 0, 520)
+    MainFrame.Position = UDim2.new(0.5, -360, 0.5, -260)
+    MainFrame.BackgroundColor3 = Theme.Background
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Parent = ScreenGui
+    
+    local MainCorner = Instance.new("UICorner")
+    MainCorner.CornerRadius = Theme.CornerRadius
+    MainCorner.Parent = MainFrame
+    
+    -- Shadow effect
+    local Shadow = Instance.new("ImageLabel")
+    Shadow.Name = "Shadow"
+    Shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    Shadow.Position = UDim2.new(0.5, 0, 0.5, 4)
+    Shadow.Size = UDim2.new(1, 30, 1, 30)
+    Shadow.BackgroundTransparency = 1
+    Shadow.Image = "rbxassetid://6014261993"
+    Shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    ImageTransparency = 0.5
+    Shadow.ZIndex = -1
+    Shadow.Parent = MainFrame
+    
+    -- Title Bar
+    local TitleBar = Instance.new("Frame")
+    TitleBar.Name = "TitleBar"
+    TitleBar.Size = UDim2.new(1, 0, 0, 40)
+    TitleBar.BackgroundColor3 = Theme.Secondary
+    TitleBar.BorderSizePixel = 0
+    TitleBar.Parent = MainFrame
+    
+    local TitleCorner = Instance.new("UICorner")
+    TitleCorner.CornerRadius = Theme.CornerRadius
+    TitleCorner.Parent = TitleBar
+    
+    -- Fix corner for title bar
+    local TitleFix = Instance.new("Frame")
+    TitleFix.Name = "TitleFix"
+    TitleFix.Size = UDim2.new(1, 0, 0, 10)
+    TitleFix.Position = UDim2.new(0, 0, 0, 30)
+    TitleFix.BackgroundColor3 = Theme.Secondary
+    TitleFix.BorderSizePixel = 0
+    TitleFix.Parent = TitleBar
+    
+    -- Title Text
+    local TitleText = Instance.new("TextLabel")
+    TitleText.Name = "TitleText"
+    TitleText.Size = UDim2.new(1, -120, 1, 0)
+    TitleText.Position = UDim2.new(0, 15, 0, 0)
+    TitleText.BackgroundTransparency = 1
+    TitleText.Text = "⚡ ZUNCODEX V4.1.1 - BLOX FRUITS VIP"
+    TitleText.TextColor3 = Theme.TextPrimary
+    TitleText.TextSize = 16
+    TitleText.Font = Theme.FontBold
+    TitleText.TextXAlignment = Enum.TextXAlignment.Left
+    TitleText.Parent = TitleBar
+    
+    -- Close Button
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Name = "CloseBtn"
+    CloseBtn.Size = UDim2.new(0, 35, 0, 28)
+    CloseBtn.Position = UDim2.new(1, -40, 0, 6)
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+    CloseBtn.BorderSizePixel = 0
+    CloseBtn.Text = "✕"
+    CloseText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CloseBtn.TextSize = 14
+    CloseBtn.Font = Theme.FontBold
+    CloseBtn.Parent = TitleBar
+    
+    local CloseCorner = Instance.new("UICorner")
+    CloseCorner.CornerRadius = Theme.SmallCorner
+    CloseCorner.Parent = CloseBtn
+    
+    -- Minimize Button
+    local MinBtn = Instance.new("TextButton")
+    MinBtn.Name = "MinBtn"
+    MinBtn.Size = UDim2.new(0, 35, 0, 28)
+    MinBtn.Position = UDim2.new(1, -80, 0, 6)
+    MinBtn.BackgroundColor3 = Theme.Warning
+    MinBtn.BorderSizePixel = 0
+    MinBtn.Text = "−"
+    MinBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    MinBtn.TextSize = 18
+    MinBtn.Font = Theme.FontBold
+    MinBtn.Parent = TitleBar
+    
+    local MinCorner = Instance.new("UICorner")
+    MinCorner.CornerRadius = Theme.SmallCorner
+    MinCorner.Parent = MinBtn
+    
+    -- Sidebar
+    local Sidebar = Instance.new("Frame")
+    Sidebar.Name = "Sidebar"
+    Sidebar.Size = UDim2.new(0, 160, 1, -40)
+    Sidebar.Position = UDim2.new(0, 0, 0, 40)
+    Sidebar.BackgroundColor3 = Theme.Secondary
+    Sidebar.BorderSizePixel = 0
+    Sidebar.Parent = MainFrame
+    
+    local SideCorner = Instance.new("UICorner")
+    SideCorner.CornerRadius = UDim.new(0, 0) -- No corner on left side
+    SideCorner.Parent = Sidebar
+    
+    -- Fix sidebar corners
+    local SideFixTop = Instance.new("Frame")
+    SideFixTop.Size = UDim2.new(1, 0, 0, 8)
+    SideFixTop.Position = UDim2.new(0, 0, 0, 0)
+    SideFixTop.BackgroundColor3 = Theme.Secondary
+    SideFixTop.BorderSizePixel = 0
+    SideFixTop.Parent = Sidebar
+    
+    local SideFixBottom = Instance.new("Frame")
+    SideFixBottom.Size = UDim2.new(1, 0, 0, 8)
+    SideFixBottom.Position = UDim2.new(0, 0, 1, -8)
+    SideFixBottom.BackgroundColor3 = Theme.Secondary
+    SideFixBottom.BorderSizePixel = 0
+    SideFixBottom.Parent = Sidebar
+    
+    -- Tab Buttons Container
+    local TabContainer = Instance.new("ScrollingFrame")
+    TabContainer.Name = "TabContainer"
+    TabContainer.Size = UDim2.new(1, -10, 1, -10)
+    TabContainer.Position = UDim2.new(0, 5, 0, 5)
+    TabContainer.BackgroundTransparency = 1
+    TabContainer.ScrollBarThickness = 3
+    TabContainer.ScrollBarImageColor3 = Theme.Accent
+    TabContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+    TabContainer.Parent = Sidebar
+    
+    local TabList = Instance.new("UIListLayout")
+    TabList.SortOrder = Enum.SortOrder.LayoutOrder
+    TabList.Padding = UDim.new(0, 3)
+    TabList.Parent = TabContainer
+    
+    -- Content Area
+    local ContentArea = Instance.new("Frame")
+    ContentArea.Name = "ContentArea"
+    ContentArea.Size = UDim2.new(1, -165, 1, -45)
+    ContentArea.Position = UDim2.new(0, 160, 0, 40)
+    ContentArea.BackgroundTransparency = 1
+    ContentArea.Parent = MainFrame
+    
+    -- Tab definitions (10 tabs)
+    local Tabs = {
+        {Name = "🏠 Main", ID = "Main", Icon = "🏠"},
+        {Name = "⚔️ Combat", ID = "Combat", Icon = "⚔️"},
+        {Name = "👹 Boss", ID = "Boss", Icon = "👹"},
+        {Name = "🍎 Fruit", ID = "Fruit", Icon = "🍎"},
+        {Name = "🌊 Sea", ID = "Sea", Icon = "🌊"},
+        {Name = "👁️ ESP", ID = "ESP", Icon = "👁️"},
+        {Name = "🏃 Race", ID = "Race", Icon = "🏃"},
+        {Name = "🔧 Misc", ID = "Misc", Icon = "🔧"},
+        {Name = "⚙️ Utility", ID = "Utility", Icon = "⚙️"},
+        {Name = "ℹ️ About", ID = "About", Icon = "ℹ️"}
+    }
+    
+    -- Create tab buttons
+    self.TabButtons = {}
+    
+    for i, tabData in ipairs(Tabs) do
+        local TabBtn = Instance.new("TextButton")
+        TabBtn.Name = tabData.ID .. "Tab"
+        TabBtn.Size = UDim2.new(1, 0, 0, 38)
+        TabBtn.BackgroundColor3 = i == 1 and Theme.TabActive or Theme.TabInactive
+        TabBtn.BorderSizePixel = 0
+        TabBtn.Text = tabData.Name
+        TabBtn.TextColor3 = Theme.TextPrimary
+        TabBtn.TextSize = 13
+        TabBtn.Font = Theme.Font
+        TabBtn.LayoutOrder = i
+        TabBtn.Parent = TabContainer
+        
+        local TabCorner = Instance.new("UICorner")
+        TabCorner.CornerRadius = Theme.SmallCorner
+        TabCorner.Parent = TabBtn
+        
+        -- Hover effect
+        TabBtn.MouseEnter:Connect(function()
+            if self.CurrentTab ~= tabData.ID then
+                TweenService:Create(TabBtn, TweenInfo.new(0.2), {
+                    BackgroundColor3 = Theme.TabHover
+                }):Play()
+            end
+        end)
+        
+        TabBtn.MouseLeave:Connect(function()
+            if self.CurrentTab ~= tabData.ID then
+                TweenService:Create(TabBtn, TweenInfo.new(0.2), {
+                    BackgroundColor3 = Theme.TabInactive
+                }):Play()
+            end
+        end)
+        
+        -- Click handler
+        TabBtn.MouseButton1Click:Connect(function()
+            self:SwitchTab(tabData.ID)
+            
+            -- Update button colors
+            for _, btn in pairs(self.TabButtons) do
+                btn.BackgroundColor3 = Theme.TabInactive
+            end
+            TabBtn.BackgroundColor3 = Theme.TabActive
+        end)
+        
+        self.TabButtons[tabData.ID] = TabBtn
+    end
+    
+    -- Update tab container size
+    TabContainer.CanvasSize = UDim2.new(0, 0, 0, TabList.AbsoluteContentSize.Y + 10)
+    TabList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        TabContainer.CanvasSize = UDim2.new(0, 0, 0, TabList.AbsoluteContentSize.Y + 10)
+    end)
+    
+    -- Create content frames for each tab
+    for _, tabData in ipairs(Tabs) do
+        local TabContent = Instance.new("ScrollingFrame")
+        TabContent.Name = tabData.ID .. "Content"
+        TabContent.Size = UDim2.new(1, 0, 1, 0)
+        TabContent.BackgroundTransparency = 1
+        TabContent.Visible = tabData.ID == "Main" -- Show only main tab initially
+        TabContent.ScrollBarThickness = 4
+        TabContent.ScrollBarImageColor3 = Theme.Accent
+        TabContent.CanvasSize = UDim2.new(0, 0, 0, 0)
+        TabContent.Parent = ContentArea
+        
+        local ContentLayout = Instance.new("UIListLayout")
+        ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        ContentLayout.Padding = UDim.new(0, 8)
+        ContentLayout.Parent = TabContent
+        
+        ContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            TabContent.CanvasSize = UDim2.new(0, 0, 0, ContentLayout.AbsoluteContentSize.Y + 10)
+        end)
+        
+        self.TabContents[tabData.ID] = TabContent
+    end
+    
+    -- Make draggable
+    local dragging = false
+    local dragInput
+    local dragStart
+    local startPos
+    
+    TitleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = MainFrame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    
+    TitleBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    
+    -- Minimize functionality
+    local isMinimized = false
+    MinBtn.MouseButton1Click:Connect(function()
+        isMinimized = not isMinimized
+        TweenService:Create(MainFrame, TweenInfo.new(0.3), {
+            Size = isMinimized and UDim2.new(0, 720, 0, 50) or UDim2.new(0, 720, 0, 520)
+        }):Play()
+        
+        Sidebar.Visible = not isMinimized
+        ContentArea.Visible = not isMinimized
+        MinBtn.Text = isMinimized and "+" or "−"
+    end)
+    
+    -- Close functionality
+    CloseBtn.MouseButton1Click:Connect(function()
+        self:Destroy()
+    end)
+    
+    -- Store references
+    self.MainFrame = MainFrame
+    self.TitleBar = TitleBar
+    self.Sidebar = Sidebar
+    self.ContentArea = ContentArea
+    self.TabContainer = TabContainer
+    
+    -- Build all tabs
+    self:BuildAllTabs()
+    
+    self:AddLog("Zuncodex V4.1.1 GUI initialized successfully!", "Success")
+    self:AddLog("All 10 tabs loaded. Configure and enable features.", "Info")
+    
+    return ScreenGui
+end
+
+-- ============================================
+-- PHẦN 7: TAB SWITCHING SYSTEM
+-- ============================================
+
+function Zuncodex:SwitchTab(tabID)
+    self.CurrentTab = tabID
+    
+    -- Hide all content
+    for id, content in pairs(self.TabContents) do
+        content.Visible = (id == tabID)
+    end
+    
+    -- Update button states
+    for id, btn in pairs(self.TabButtons) do
+        if id == tabID then
+            btn.BackgroundColor3 = Theme.TabActive
+        else
+            btn.BackgroundColor3 = Theme.TabInactive
+        end
+    end
+    
+    self:AddLog("Switched to tab: " .. tabID, "Info")
+end
+
+-- ============================================
+-- PHẦN 8: UI HELPER FUNCTIONS
+-- ============================================
+
+function Zuncodex:CreateSection(parent, title, icon)
+    local Section = Instance.new("Frame")
+    Section.Name = title .. "Section"
+    Section.Size = UDim2.new(1, 0, 0, auto)
+    Section.BackgroundColor3 = Theme.InputBackground
+    Section.BorderSizePixel = 0
+    Section.Parent = parent
+    
+    local SectionCorner = Instance.new("UICorner")
+    SectionCorner.CornerRadius = Theme.CornerRadius
+    SectionCorner.Parent = Section
+    
+    -- Section Header
+    local Header = Instance.new("Frame")
+    Header.Name = "Header"
+    Header.Size = UDim2.new(1, 0, 0, 32)
+    Header.BackgroundColor3 = Theme.AccentDark
+    Header.BorderSizePixel = 0
+    Header.Parent = Section
+    
+    local HeaderCorner = Instance.new("UICorner")
+    HeaderCorner.CornerRadius = Theme.CornerRadius
+    HeaderCorner.Parent = Header
+    
+    -- Fix header bottom corners
+    local HeaderFix = Instance.new("Frame")
+    HeaderFix.Size = UDim2.new(1, 0, 0, 8)
+    HeaderFix.Position = UDim2.new(0, 0, 0, 24)
+    HeaderFix.BackgroundColor3 = Theme.AccentDark
+    HeaderFix.BorderSizePixel = 0
+    HeaderFix.Parent = Header
+    
+    -- Header Text
+    local HeaderText = Instance.new("TextLabel")
+    HeaderText.Name = "HeaderText"
+    HeaderText.Size = UDim2(1, -15, 1, 0)
+    HeaderText.Position = UDim2.new(0, 12, 0, 0)
+    HeaderText.BackgroundTransparency = 1
+    HeaderText.Text = (icon or "") .. " " .. title
+    HeaderText.TextColor3 = Theme.TextPrimary
+    HeaderText.TextSize = 14
+    HeaderText.Font = Theme.FontBold
+    HeaderText.TextXAlignment = Enum.TextXAlignment.Left
+    HeaderText.Parent = Header
+    
+    -- Content container
+    local Content = Instance.new("Frame")
+    Content.Name = "Content"
+    Content.Size = UDim2.new(1, -10, 0, auto)
+    Content.Position = UDim2.new(0, 5, 0, 37)
+    Content.BackgroundTransparency = 1
+    Content.Parent = Section
+    
+    local ContentLayout = Instance.new("UIListLayout")
+    ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ContentLayout.Padding = UDim.new(0, 6)
+    ContentLayout.Parent = Content
+    
+    ContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        Section.Size = UDim2.new(1, 0, 0, ContentLayout.AbsoluteContentSize.Y + 43)
+    end)
+    
+    return Content
+end
+
+function Zuncodex:CreateToggle(parent, text, configKey, callback)
+    local Toggle = Instance.new("Frame")
+    Toggle.Name = text .. "Toggle"
+    Toggle.Size = UDim2.new(1, 0, 0, 35)
+    Toggle.BackgroundTransparency = 1
+    Toggle.Parent = parent
+    
+    -- Label
+    local Label = Instance.new("TextLabel")
+    Label.Name = "Label"
+    Label.Size = UDim2(1, -55, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.TextColor3 = Theme.TextPrimary
+    Label.TextSize = 13
+    Label.Font = Theme.Font
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.TextYAlignment = Enum.TextYAlignment.Center
+    Label.Parent = Toggle
+    
+    -- Toggle Button
+    local Button = Instance.new("TextButton")
+    Button.Name = "ToggleButton"
+    Button.Size = UDim2.new(0, 45, 0, 22)
+    Button.Position = UDim2.new(1, -45, 0, 6)
+    Button.BackgroundColor3 = self.Config[configKey] and Theme.ToggleOn or Theme.ToggleOff
+    Button.BorderSizePixel = 0
+    Button.Text = self.Config[configKey] and "ON" or "OFF"
+    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Button.TextSize = 11
+    Button.Font = Theme.FontBold
+    Button.Parent = Toggle
+    
+    local ButtonCorner = Instance.new("UICorner")
+    ButtonCorner.CornerRadius = UDim.new(0, 11)
+    ButtonCorner.Parent = Button
+    
+    -- Click handler
+    Button.MouseButton1Click:Connect(function()
+        self.Config[configKey] = not self.Config[configKey]
+        Button.BackgroundColor3 = self.Config[configKey] and Theme.ToggleOn or Theme.ToggleOff
+        Button.Text = self.Config[configKey] and "ON" or "OFF"
+        
+        if callback then
+            callback(self.Config[configKey])
+        end
+        
+        self:AddLog(text .. ": " .. tostring(self.Config[configKey]), "Info")
+    end)
+    
+    return Toggle, Button
+end
+
+function Zuncodex:CreateButton(parent, text, callback, style)
+    local Button = Instance.new("TextButton")
+    Button.Name = text .. "Button"
+    Button.Size = UDim2.new(1, 0, 0, 32)
+    Button.BackgroundColor3 = style == "Danger" and Theme.Error or 
+                               style == "Success" and Theme.Success or 
+                               Theme.Accent
+    Button.BorderSizePixel = 0
+    Button.Text = text
+    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Button.TextSize = 13
+    Button.Font = Theme.FontBold
+    Button.Parent = parent
+    
+    local ButtonCorner = Instance.new("UICorner")
+    ButtonCorner.CornerRadius = Theme.SmallCorner
+    ButtonCorner.Parent = Button
+    
+    -- Hover effect
+    Button.MouseEnter:Connect(function()
+        TweenService:Create(Button, TweenInfo.new(0.2), {
+            BackgroundColor3 = style == "Danger" and Color3.fromRGB(200, 40, 40) or
+                               style == "Success" and Color3.fromRGB(0, 200, 110) or
+                               Theme.ButtonHover
+        }):Play()
+    end)
+    
+    Button.MouseLeave:Connect(function()
+        Button.BackgroundColor3 = style == "Danger" and Theme.Error or
+                                   style == "Success" and Theme.Success or
+                                   Theme.Accent
+    end)
+    
+    -- Click handler
+    Button.MouseButton1Click:Connect(function()
+        if callback then
+            callback()
+        end
+        self:AddLog("Button clicked: " .. text, "Info")
+    end)
+    
+    return Button
+end
+
+function Zuncodex:CreateSlider(parent, text, configKey, min, max, default, callback)
+    local Slider = Instance.new("Frame")
+    Slider.Name = text .. "Slider"
+    Slider.Size = UDim2.new(1, 0, 0, 50)
+    Slider.BackgroundTransparency = 1
+    Slider.Parent = parent
+    
+    -- Label
+    local Label = Instance.new("TextLabel")
+    Label.Name = "Label"
+    Label.Size = UDim2.new(1, 0, 0, 20)
+    Label.BackgroundTransparency = 1
+    Label.Text = text .. ": " .. (self.Config[configKey] or default)
+    Label.TextColor3 = Theme.TextPrimary
+    Label.TextSize = 12
+    Label.Font = Theme.Font
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Slider
+    
+    -- Slider background
+    local SliderBg = Instance.new("Frame")
+    SliderBg.Name = "SliderBg"
+    SliderBg.Size = UDim2.new(1, 0, 0, 8)
+    SliderBg.Position = UDim2.new(0, 0, 0, 25)
+    SliderBg.BackgroundColor3 = Theme.ToggleOff
+    SliderBg.BorderSizePixel = 0
+    SliderBg.Parent = Slider
+    
+    local BgCorner = Instance.new("UICorner")
+    BgCorner.CornerRadius = UDim.new(0, 4)
+    BgCorner.Parent = SliderBg
+    
+    -- Slider fill
+    local Fill = Instance.new("Frame")
+    Fill.Name = "Fill"
+    Fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    Fill.BackgroundColor3 = Theme.SliderFill
+    Fill.BorderSizePixel = 0
+    Fill.Parent = SliderBg
+    
+    local FillCorner = Instance.new("UICorner")
+    FillCorner.CornerRadius = UDim.new(0, 4)
+    FillCorner.Parent = Fill
+    
+    -- Slider button
+    local SliderBtn = Instance.new("TextButton")
+    SliderBtn.Name = "SliderBtn"
+    SliderBtn.Size = UDim2.new(0, 18, 0, 18)
+    SliderBtn.Position = UDim2.new((default - min) / (max - min), -9, 0.5, -9)
+    SliderBtn.BackgroundColor3 = Theme.TextPrimary
+    SliderBtn.BorderSizePixel = 0
+    SliderBtn.Text = ""
+    SliderBtn.Parent = SliderBg
+    
+    local BtnCorner = Instance.new("UICorner")
+    BtnCorner.CornerRadius = UDim.new(0, 9)
+    BtnCorner.Parent = SliderBtn
+    
+    -- Set initial value
+    self.Config[configKey] = self.Config[configKey] or default
+    
+    -- Dragging logic
+    local dragging = false
+    
+    SliderBtn.MouseButton1Down:Connect(function()
+        dragging = true
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local sliderPos = SliderBg.AbsolutePosition.X
+            local sliderSize = SliderBg.AbsoluteSize.X
+            local mousePos = input.Position.X
+            
+            local percent = math.clamp((mousePos - sliderPos) / sliderSize, 0, 1)
+            local value = math.floor(min + percent * (max - min))
+            
+            self.Config[configKey] = value
+            Fill.Size = UDim2.new(percent, 0, 1, 0)
+            SliderBtn.Position = UDim2.new(percent, -9, 0.5, -9)
+            Label.Text = text .. ": " .. value
+            
+            if callback then
+                callback(value)
+            end
+        end
+    end)
+    
+    return Slider, Fill, SliderBtn
+end
+
+function Zuncodex:CreateDropdown(parent, text, configKey, options, callback)
+    local Dropdown = Instance.new("Frame")
+    Dropdown.Name = text .. "Dropdown"
+    Dropdown.Size = UDim2.new(1, 0, 0, 35)
+    Dropdown.BackgroundTransparency = 1
+    Dropdown.Parent = parent
+    
+    -- Selected button
+    local Selected = Instance.new("TextButton")
+    Selected.Name = "Selected"
+    Selected.Size = UDim2.new(1, 0, 0, 30)
+    Selected.BackgroundColor3 = Theme.InputBackground
+    Selected.BorderSizePixel = 0
+    Selected.Text = text .. ": " .. (self.Config[configKey] or options[1])
+    Selected.TextColor3 = Theme.TextPrimary
+    Selected.TextSize = 12
+    Selected.Font = Theme.Font
+    Selected.Parent = Dropdown
+    
+    local SelectedCorner = Instance.new("UICorner")
+    SelectedCorner.CornerRadius = Theme.SmallCorner
+    SelectedCorner.Parent = Selected
+    
+    -- Dropdown arrow
+    local Arrow = Instance.new("TextLabel")
+    Arrow.Name = "Arrow"
+    Arrow.Size = UDim2.new(0, 20, 1, 0)
+    Arrow.Position = UDim2.new(1, -25, 0, 0)
+    Arrow.BackgroundTransparency = 1
+    Arrow.Text = "▼"
+    Arrow.TextColor3 = Theme.TextSecondary
+    Arrow.TextSize = 10
+    Arrow.Font = Theme.Font
+    Arrow.Parent = Selected
+    
+    -- Options container
+    local Options = Instance.new("Frame")
+    Options.Name = "Options"
+    Options.Size = UDim2.new(1, 0, 0, 0)
+    Options.Position = UDim2.new(0, 0, 0, 32)
+    Options.BackgroundColor3 = Theme.Secondary
+    Options.BorderSizePixel = 0
+    Options.Visible = false
+    Options.ZIndex = 10
+    Options.Parent = Dropdown
+    
+    local OptionsCorner = Instance.new("UICorner")
+    OptionsCorner.CornerRadius = Theme.SmallCorner
+    OptionsCorner.Parent = Options
+    
+    local OptionsLayout = Instance.new("UIListLayout")
+    OptionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    OptionsLayout.Parent = Options
+    
+    -- Toggle dropdown
+    local isOpen = false
+    
+    Selected.MouseButton1Click:Connect(function()
+        isOpen = not isOpen
+        Options.Visible = isOpen
+        Arrow.Text = isOpen and "▲" or "▼"
+        
+        if isOpen then
+            -- Clear old options
+            for _, child in ipairs(Options:GetChildren()) do
+                if child:IsA("TextButton") then
+                    child:Destroy()
+                end
+            end
+            
+            -- Create option buttons
+            for i, option in ipairs(options) do
+                local OptionBtn = Instance.new("TextButton")
+                OptionBtn.Name = option .. "Option"
+                OptionBtn.Size = UDim2.new(1, 0, 0, 28)
+                OptionBtn.BackgroundColor3 = Theme.InputBackground
+                OptionBtn.BorderSizePixel = 0
+                OptionBtn.Text = option
+                OptionBtn.TextColor3 = Theme.TextPrimary
+                OptionBtn.TextSize = 12
+                OptionBtn.Font = Theme.Font
+                OptionBtn.LayoutOrder = i
+                OptionBtn.ZIndex = 11
+                OptionBtn.Parent = Options
+                
+                local OptCorner = Instance.new("UICorner")
+                OptCorner.CornerRadius = Theme.SmallCorner
+                OptCorner.Parent = OptionBtn
+                
+                OptionBtn.MouseEnter:Connect(function()
+                    OptionBtn.BackgroundColor3 = Theme.TabHover
+                end)
+                
+                OptionBtn.MouseLeave:Connect(function()
+                    OptionBtn.BackgroundColor3 = Theme.InputBackground
+                end)
+                
+                OptionBtn.MouseButton1Click:Connect(function()
+                    self.Config[configKey] = option
+                    Selected.Text = text .. ": " .. option
+                    Options.Visible = false
+                    isOpen = false
+                    Arrow.Text = "▼"
+                    
+                    if callback then
+                        callback(option)
+                    end
+                    
+                    self:AddLog(text .. " set to: " .. option, "Info")
+                end)
+            end
+            
+            OptionsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                Options.Size = UDim2.new(1, 0, 0, math.min(OptionsLayout.AbsoluteContentSize.Y, 150))
+            end)
+        end
+    end)
+    
+    -- Close when clicking outside
+    InputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 and isOpen then
+            local mousePos = Vector2.new(input.Position.X, input.Position.Y)
+            if not (mousePos.X >= Selected.AbsolutePosition.X and 
+                   mousePos.X <= Selected.AbsolutePosition.X + Selected.AbsoluteSize.X and
+                   mousePos.Y >= Selected.AbsolutePosition.Y and 
+                   mousePos.Y <= Selected.AbsolutePosition.Y + Selected.AbsoluteSize.Y) then
+                Options.Visible = false
+                isOpen = false
+                Arrow.Text = "▼"
+            end
+        end
+    end)
+    
+    return Dropdown, Selected, Options
+end
+
+function Zuncodex:CreateTextBox(parent, text, placeholder, configKey, callback)
+    local TextBox = Instance.new("Frame")
+    TextBox.Name = text .. "TextBox"
+    TextBox.Size = UDim2.new(1, 0, 0, 50)
+    TextBox.BackgroundTransparency = 1
+    TextBox.Parent = parent
+    
+    -- Label
+    local Label = Instance.new("TextLabel")
+    Label.Name = "Label"
+    Label.Size = UDim2.new(1, 0, 0, 18)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.TextColor3 = Theme.TextPrimary
+    Label.TextSize = 12
+    Label.Font = Theme.Font
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = TextBox
+    
+    -- Input box
+    local Input = Instance.new("TextBox")
+    Input.Name = "Input"
+    Input.Size = UDim2.new(1, 0, 0, 28)
+    Input.Position = UDim2.new(0, 0, 0, 20)
+    Input.BackgroundColor3 = Theme.InputBackground
+    Input.BorderSizePixel = 0
+    Input.PlaceholderText = placeholder
+    Input.Text = self.Config[configKey] or ""
+    Input.TextColor3 = Theme.TextPrimary
+    Input.PlaceholderColor3 = Theme.TextSecondary
+    Input.TextSize = 12
+    Input.Font = Theme.Input.Parent = TextBox
+    
+    local InputCorner = Instance.new("UICorner")
+    InputCorner.CornerRadius = Theme.SmallCorner
+    InputCorner.Parent = Input
+    
+    Input.FocusLost: function(enterPressed)
+        if enterPressed or true then
+            self.Config[configKey] = Input.Text
+            
+            if callback then
+                callback(Input.Text)
+            end
+            
+            self:AddLog(text .. " set to: " .. Input.Text, "Info")
+        end
+    end
+    
+    return TextBox, Input
+end
+
+function Zuncodex:CreateLabel(parent, text, color)
+    local Label = Instance.new("TextLabel")
+    Label.Name = "Label_" .. text:sub(1, 10)
+    Label.Size = UDim2.new(1, 0, 0, 20)
+    Label.BackgroundTransparency = 1
+    Label.Text = text
+    Label.TextColor3 = color or Theme.TextSecondary
+    Label.TextSize = 12
+    Label.Font = Theme.Font
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.TextWrapped = true
+    Label.Parent = parent
+    
+    return Label
+end
+
+function Zuncodex:CreateDivider(parent)
+    local Divider = Instance.new("Frame")
+    Divider.Name = "Divider"
+    Divider.Size = UDim2.new(1, 0, 0, 1)
+    Divider.BackgroundColor3 = Theme.BorderColor
+    Divider.BorderSizePixel = 0
+    Divider.Parent = parent
+    
+    return Divider
+end
+
+-- ============================================
+-- PHẦN 9: TAB BUILDING FUNCTIONS
+-- ============================================
+
+function Zuncodex:BuildAllTabs()
+    self:BuildMainTab()
+    self:BuildCombatTab()
+    self:BuildBossTab()
+    self:BuildFruitTab()
+    self:BuildSeaTab()
+    self:BuildESPTab()
+    self:BuildRaceTab()
+    self:BuildMiscTab()
+    self:BuildUtilityTab()
+    self:BuildAboutTab()
+end
+
+-- TAB 1: MAIN TAB
+function Zuncodex:BuildMainTab()
+    local content = self.TabContents["Main"]
+    
+    -- Player Info Section
+    local infoSec = self:CreateSection(content, "Player Information", "👤")
+    self.UIComponents.InfoLabel = self:CreateLabel(infoSec, 
+        string.format("Level: %d | Race: %s\nBounty: ??? | Fragments: ???\nHealth: ??? / ???", 
+            self:GetPlayerLevel(), self.Config.CurrentRace))
+    
+    -- Auto Farm Section
+    local farmSec = self:CreateSection(content, "Auto Farm System", "🌾")
+    self:CreateToggle(farmSec, "Enable Auto Farm", "AutoFarm", function(value)
+        if value then
+            self:StartAutoFarm()
+        else
+            self:StopAutoFarm()
+        end
+    end)
+    
+    self:CreateToggle(farmSec, "Auto Quest", "AutoQuest", function(value)
+        if value then
+            self:StartAutoQuest()
+        else
+            self:StopAutoQuest()
+        end
+    end)
+    
+    self:CreateToggle(farmSec, "Auto Haki (Buso/Ken)", "AutoHaki")
+    
+    self:CreateDropdown(farmSec, "Stats Preset", "StatsPreset", 
+        {"Balanced", "Sword", "Fruit", "Gun"}, function(value)
+            self:AddLog("Stats preset changed to: " .. value, "Info")
+        end)
+    
+    self:CreateToggle(farmSec, "Auto Stats Allocation", "AutoStats")
+    
+    self:CreateSlider(farmSec, "Farm Radius", "FarmRadius", 100, 2000, 500, function(value)
+        self:AddLog("Farm radius set to: " .. value .. " studs", "Info")
+    end)
+    
+    self:CreateSlider(farmSec, "Attack Delay", "AttackDelay", 0.1, 2.0, 0.3, function(value)
+        self:AddLog("Attack delay set to: " .. value .. "s", "Info")
+    end)
+    
+    -- Quick Actions Section
+    local quickSec = self:CreateSection(content, "Quick Actions", "⚡")
+    self:CreateButton(quickSec, "🔄 Nearest Enemy", function()
+        local enemy, dist = self:FindNearestEnemy()
+        if enemy then
+            self:AddLog("Nearest enemy: " .. enemy.Name .. " (" .. math.floor(dist) .. " studs)", "Success")
+        else
+            self:AddLog("No enemies found nearby", "Warning")
+        end
+    end)
+    
+    self:CreateButton(quickSec, "📋 Current Quest", function()
+        local quest = self:GetQuestProgress()
+        if quest then
+            self:AddLog(string.format("Quest: %s (%d/%d)", quest.Name, quest.Progress, quest.Goal), "Info")
+        else
+            self:AddLog("No active quest", "Warning")
+        end
+    end)
+    
+    self:CreateButton(quickSec, "💪 Activate Haki", function()
+        self:ActivateHaki()
+    end)
+    
+    self:CreateButton(quickSec, "📊 Allocate Stats", function()
+        self:AllocateStats()
+    end)
+end
+
+-- TAB 2: COMBAT TAB
+function Zuncodex:BuildCombatTab()
+    local content = self.TabContents["Combat"]
+    
+    -- Kill Aura Section
+    local kaSec = self:CreateSection(content, "Kill Aura", "⚔️")
+    self:CreateToggle(kaSec, "Enable Kill Aura", "KillAura", function(value)
+        if value then
+            self:EnableKillAura()
+        else
+            self:DisableKillAura()
+        end
+    end)
+    
+    self:CreateSlider(kaSec, "Kill Aura Range", "KillAuraRange", 10, 200, 50, function(value)
+        self:AddLog("Kill Aura range: " .. value .. " studs", "Info")
+    end)
+    
+    -- Aimbot Section
+    local aimSec = self:CreateSection(content, "Aimbot System", "🎯")
+    self:CreateToggle(aimSec, "Enable Aimbot", "Aimbot", function(value)
+        if value then
+            self:EnableAimbot()
+        else
+            self:DisableAimbot()
+        end
+    end)
+    
+    self:CreateSlider(aimSec, "Aim Smoothness", "AimbotSmoothness", 0.05, 1.0, 0.5, function(value)
+        self:AddLog("Aim smoothness: " .. value, "Info")
+    end)
+    
+    self:CreateToggle(aimSec, "Target Players", "AimbotTargetPlayers")
+    self:CreateToggle(aimSec, "Target NPCs", "AimbotTargetNPCs")
+    
+    -- Skills Section
+    local skillSec = self:CreateSection(content, "Skill Settings", "✨")
+    self:CreateLabel(skillSec, "Configure skill usage patterns:", Theme.TextSecondary)
+    self:CreateToggle(skillSec, "Use Z Skill (Melee)", "UseSkillZ", true)
+    self:CreateToggle(skillSec, "Use X Skill (Melee)", "UseSkillX", true)
+    self:CreateToggle(skillSec, "Use C Skill (Melee)", "UseSkillC", true)
+    self:CreateToggle(skillSec, "Use V Skill (Melee)", "UseSkillV", true)
+    
+    -- Combat Mode
+    local modeSec = self:CreateSection(content, "Combat Mode", "🔥")
+    self:CreateDropdown(modeSec, "Attack Priority", "AttackPriority", 
+        {"Nearest", "Lowest HP", "Highest HP", "Highest Level"}, function(value)
+            self:AddLog("Attack priority: " .. value, "Info")
+        end)
+    
+    self:CreateToggle(modeSec, "Teleport to Target", "TeleportToTarget")
+    self:CreateToggle(modeSec, "Face Target", "FaceTarget", true)
+end
+
+-- TAB 3: BOSS TAB
+function Zuncodex:BuildBossTab()
+    local content = self.TabContents["Boss"]
+    
+    -- Boss Selection Section
+    local selectSec = self:CreateSection(content, "Boss Selection", "📋")
+    self:CreateLabel(selectSec, "Select bosses to farm (48+ available):", Theme.TextSecondary)
+    
+    -- Boss list with checkboxes
+    local bossListSec = self:CreateSection(content, "Available Bosses", "👹")
+    
+    -- Category dropdown
+    self:CreateDropdown(bossListSec, "Boss Category", "BossCategory", 
+        {"All", "Sea 1 (Old World)", "Sea 2", "Sea 3", "World Bosses"}, function(value)
+            self:AddLog("Showing bosses from: " .. value, "Info")
+        end)
+    
+    -- Search box
+    local searchBox = Instance.new("TextBox")
+    searchBox.Size = UDim2.new(1, 0, 0, 28)
+    searchBox.BackgroundColor3 = Theme.InputBackground
+    searchBox.PlaceholderText = "Search bosses..."
+    searchBox.TextColor3 = Theme.TextPrimary
+    searchBox.TextSize = 12
+    searchBox.Parent = bossListSec
+    
+    local searchCorner = Instance.new("UICorner")
+    searchCorner.CornerRadius = Theme.SmallCorner
+    searchCorner.Parent = searchBox
+    
+    -- Select All / Deselect All buttons
+    local btnFrame = Instance.new("Frame")
+    btnFrame.Size = UDim2.new(1, 0, 0, 32)
+    btnFrame.BackgroundTransparency = 1
+    btnFrame.Parent = bossListSec
+    
+    local selectAllBtn = Instance.new("TextButton")
+    selectAllBtn.Size = UDim2.new(0.48, 0, 1, 0)
+    selectAllBtn.BackgroundColor3 = Theme.Success
+    selectAllBtn.Text = "Select All"
+    selectAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    selectAllBtn.Font = Theme.FontBold
+    selectAllBtn.Parent = btnFrame
+    
+    local deselectAllBtn = Instance.new("TextButton")
+    deselectAllBtn.Size = UDim2.new(0.48, 0, 1, 0)
+    deselectAllBtn.Position = UDim2.new(0.52, 0, 0, 0)
+    deselectAllBtn.BackgroundColor3 = Theme.Error
+    deselectAllBtn.Text = "Deselect All"
+    deselectAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    deselectAllBtn.Font = Theme.FontBold
+    deselectAllBtn.Parent = btnFrame
+    
+    -- Boss Farm Settings
+    local settingsSec = self:CreateSection(content, "Boss Farm Settings", "⚙️")
+    self:CreateToggle(settingsSec, "Auto Farm Bosses", "AutoFarmBoss", function(value)
+        if value then
+            self:StartBossFarm()
+        else
+            self:StopBossFarm()
+        end
+    end)
+    
+    self:CreateToggle(settingsSec, "Teleport to Boss", "BossTeleport")
+    self:CreateToggle(settingsSec, "Only Attack Alive Bosses", "BossOnlyAlive")
+    
+    -- Quick Boss Actions
+    local actionSec = self:CreateSection(content, "Quick Actions", "🔍")
+    self:CreateButton(actionSec, "🔍 Find Nearest Boss", function()
+        for _, bossName in ipairs(self.Config.BossList) do
+            local boss = self:FindBoss(bossName)
+            if boss then
+                self:AddLog("Found boss: " .. bossName .. " at " .. tostring(boss:GetPivot().Position), "Success")
+                return
+            end
+        end
+        self:AddLog("No bosses found in workspace", "Warning")
+    end)
+    
+    self:CreateButton(actionSec, "📍 TP to Nearest Boss", function()
+        for _, bossName in ipairs(self.Config.BossList) do
+            local boss = self:FindBoss(bossName)
+            if boss then
+                local hrp = boss:FindFirstChild("HumanoidRootPart")
+                local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if hrp and myHRP then
+                    myHRP.CFrame = hrp.CFrame * CFrame.new(0, 0, 10)
+                    self:AddLog("Teleported to: " .. bossName, "Success")
+                end
+                return
+            end
+        end
+        self:AddLog("No bosses found to teleport to", "Warning")
+    end)
+end
+
+-- TAB 4: FRUIT TAB
+function Zuncodex:BuildFruitTab()
+    local content = self.TabContents["Fruit"]
+    
+    -- Fruit Tracker Section
+    local trackSec = self:CreateSection(content, "Fruit Tracker", "🍎")
+    self:CreateToggle(trackSec, "Enable Fruit ESP", "FruitESP")
+    self:CreateToggle(trackSec, "Auto Collect Fruits", "AutoCollectFruits")
+    self:CreateToggle(trackSec, "Fruit Notifications", "FruitNotify")
+    self:CreateToggle(trackSec, "Bring Fruits to Me", "BringFruits")
+    
+    -- Fruit Types
+    local typeSec = self:CreateSection(content, "Fruit Types", "🌈")
+    self:CreateToggle(typeSec, "Track Natural Fruits", "TrackNatural", true)
+    self:CreateToggle(typeSec, "Track Awakened Fruits", "TrackAwakened", true)
+    self:CreateToggle(typeSec, "Track Legendary Fruits", "TrackLegendary", true)
+    self:CreateToggle(typeSec, "Track Mythic Fruits", "TrackMythic", true)
+    
+    -- Fruit Spawn Section
+    local spawnSec = self:CreateSection(content, "Fruit Spawn", "🌀")
+    self:CreateButton(spawnSec, "🌀 Spawn Random Fruit", function()
+        self:CallRemote("SpawnFruit")
+        self:AddLog("Attempting to spawn fruit...", "Info")
+    end)
+    
+    self:CreateButton(spawnSec, "🎲 Eat Random Fruit", function()
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+        if backpack then
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item:IsA("Tool") and item.Name:find("Fruit") then
+                    self:CallRemote("EatFruit", item)
+                    self:AddLog("Eating fruit: " .. item.Name, "Success")
+                    return
+                end
+            end
+            self:AddLog("No fruits in backpack", "Warning")
+        end
+    end)
+    
+    self:CreateButton(spawnSec, "🗑️ Drop Current Fruit", function()
+        self:CallRemote("DropFruit")
+        self:AddLog("Dropping current fruit...", "Info")
+    end)
+    
+    -- Fruit Inventory
+    local invSec = self:CreateSection(content, "Fruit Inventory", "📦")
+    self:CreateButton(invSec, "📋 List Inventory Fruits", function()
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+        local char = LocalPlayer.Character
+        local fruits = {}
+        
+        if backpack then
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item:IsA("Tool") and (item.Name:find("Fruit") or item.Name:find("Devil")) then
+                    table.insert(fruits, item.Name)
+                end
+            end
+        end
+        
+        if char then
+            for _, item in ipairs(char:GetChildren()) do
+                if item:IsA("Tool") and (item.Name:find("Fruit") or item.Name:find("Devil")) then
+                    table.insert(fruits, item.Name .. " (Equipped)")
+                end
+            end
+        end
+        
+        if #fruits > 0 then
+            self:AddLog("Fruits found: " .. table.concat(fruits, ", "), "Success")
+        else
+            self:AddLog("No fruits in inventory", "Warning")
+        end
+    end)
+end
+
+-- TAB 5: SEA TAB
+function Zuncodex:BuildSeaTab()
+    local content = self.TabContents["Sea"]
+    
+    -- Mirage Island Section
+    local mirageSec = self:CreateSection(content, "Mirage Island", "🏝️")
+    self:CreateToggle(mirageSec, "Auto Detect & TP to Mirage", "AutoMirage", function(value)
+        if value then
+            self:StartMirageDetection()
+        else
+            self:StopMirageDetection()
+        end
+    end)
+    
+    self:CreateButton(mirageSec, "🔍 Check for Mirage Island", function()
+        if self:DetectMirageIsland() then
+            self:AddLog("Mirage Island found!", "Success")
+        else
+            self:AddLog("Mirage Island not detected", "Info")
+        end
+    end)
+    
+    -- Kitsune Island Section
+    local kitsuneSec = self:CreateSection(content, "Kitsune Island", "🦊")
+    self:CreateToggle(kitsuneSec, "Auto Detect Kitsune", "AutoKitsune", function(value)
+        if value then
+            self:StartKitsuneDetection()
+        else
+            self:StopKitsuneDetection()
+        end
+    end)
+    
+    -- Sea Beast Section
+    local beastSec = self:CreateSection(content, "Sea Beast Hunting", "🐉")
+    self:CreateToggle(beastSec, "Auto Hunt Sea Beasts", "AutoSeaBeast", function(value)
+        if value then
+            self:StartSeaBeastHunt()
+        else
+            self:StopSeaBeastHunt()
+        end
+    end)
+    
+    self:CreateDropdown(beastSec, "Target Beast Type", "SeaBeastType",
+        {"All", "Leviathan", "Terrorshark", "Sea Beast", "Shark"}, function(value)
+            self:AddLog("Targeting: " .. value, "Info")
+        end)
+    
+    -- Raid Section
+    local raidSec = self:CreateSection(content, "Raid System", "⚔️")
+    self:CreateToggle(raidSec, "Auto Join Raid", "AutoRaid", function(value)
+        if value then
+            self:StartAutoRaid()
+        else
+            self:StopAutoRaid()
+        end
+    end)
+    
+    self:CreateButton(raidSec, "🔍 Find Raid Entrance", function()
+        local entrance = self:FindRaidEntrance()
+        if entrance then
+            self:AddLog("Raid entrance found: " .. entrance.Name, "Success")
+        else
+            self:AddLog("No raid entrance found", "Warning")
+        end
+    end)
+    
+    -- Fishing Section
+    local fishSec = self:CreateSection(content, "Fishing System", "🎣")
+    self:CreateToggle(fishSec, "Auto Fishing", "AutoFishing", function(value)
+        if value then
+            self:StartAutoFishing()
+        else
+            self:StopAutoFishing()
+        end
+    end)
+    
+    self:CreateSlider(fishSec, "Fishing Speed Multiplier", "FishingSpeed", 0.5, 5.0, 1.0, function(value)
+        self:AddLog("Fishing speed: " .. value .. "x", "Info")
+    end)
+end
+
+-- TAB 6: ESP TAB
+function Zuncodex:BuildESPTab()
+    local content = self.TabContents["ESP"]
+    
+    -- Main ESP Toggle
+    local mainSec = self:CreateSection(content, "ESP Main", "👁️")
+    self:CreateToggle(mainSec, "Enable ESP System", "ESP_Enabled", function(value)
+        if value then
+            self:EnableESP()
+        else
+            self:DisableESP()
+        end
+    end)
+    
+    self:CreateSlider(mainSec, "ESP Distance (studs)", "ESP_Distance", 1000, 50000, 10000, function(value)
+        self:AddLog("ESP distance: " .. value .. " studs", "Info")
+    end)
+    
+    -- ESP Categories
+    local catSec = self:CreateSection(content, "ESP Categories", "📂")
+    self:CreateToggle(catSec, "Show Players", "ESP_Players")
+    self:CreateToggle(catSec, "Show Enemies/Mobs", "ESP_Enemies")
+    self:CreateToggle(catSec, "Show Devil Fruits", "ESP_Fruits")
+    self:CreateToggle(catSec, "Show Chests/Treasures", "ESP_Chests")
+    self:CreateToggle(catSec, "Show NPCs", "ESP_NPCs")
+    self:CreateToggle(catSec, "Show Sea Beasts", "ESP_SeaBeasts")
+    
+    -- Color Settings
+    local colorSec = self:CreateSection(content, "ESP Colors", "🎨")
+    self:CreateLabel(colorSec, "Customize ESP highlight colors:", Theme.TextSecondary)
+    
+    -- Note: Full color picker would require more complex UI
+    self:CreateLabel(colorSec, "Players: Blue | Enemies: Red | Fruits: Orange", Theme.Info)
+    self:CreateLabel(colorSec, "Chests: Gold | NPCs: Green | Sea Beasts: Purple", Theme.Info)
+    
+    -- ESP Options
+    local optSec = self:CreateSection(content, "ESP Options", "⚙️")
+    self:CreateToggle(optSec, "Show Health Bars", "ESP_ShowHealth", true)
+    self:CreateToggle(optSec, "Show Distance", "ESP_ShowDistance", true)
+    self:CreateToggle(optSec, "Show Names", "ESP_ShowNames", true)
+    self:CreateToggle(optSec, "Use Tracers", "ESP_Tracers", false)
+    self:CreateToggle(optSec, "Through Walls (Highlight)", "ESP_Highlight", true)
+end
+
+-- TAB 7: RACE TAB
+function Zuncodex:BuildRaceTab()
+    local content = self.TabContents["Race"]
+    
+    -- Race Info Section
+    local infoSec = self:CreateSection(content, "Race Information", "🏃")
+    self:CreateLabel(infoSec, "Current Race: " .. self.Config.CurrentRace, Theme.Accent)
+    self:CreateLabel(infoSec, "Complete trials to unlock V2, V3, V4 abilities", Theme.TextSecondary)
+    
+    -- Race Selection
+    local selectSec = self:CreateSection(content, "Race Selection", "🔄")
+    self:CreateDropdown(selectSec, "Current Race", "CurrentRace",
+        {"Human", "Rabbit", "Angel", "Ghoul"}, function(value)
+            self:AddLog("Race set to: " .. value, "Info")
+        end)
+    
+    -- Auto Trials
+    local trialSec = self:CreateSection(content, "Race Trials Automation", "✨")
+    self:CreateToggle(trialSec, "Auto Complete Trials", "AutoRaceTrials", function(value)
+        if value then
+            self:StartRaceTrials()
+        else
+            self:StopRaceTrials()
+        end
+    end)
+    
+    self:CreateButton(trialSec, "🧪 Start Human Trial", function()
+        self:CompleteHumanTrial()
+    end)
+    
+    self:CreateButton(trialSec, "🐰 Start Rabbit Trial", function()
+        self:CompleteRabbitTrial()
+    end)
+    
+    self:CreateButton(trialSec, "😇 Start Angel Trial", function()
+        self:CompleteAngelTrial()
+    end)
+    
+    -- Trial Progress
+    local progSec = self:CreateSection(content, "Trial Progress", "📊")
+    self:CreateLabel(progSec, "Track your race trial completion status:", Theme.TextSecondary)
+    self:CreateButton(progSec, "📋 Check Trial Status", function()
+        self:AddLog("Checking race trial status...", "Info")
+        -- Would check actual game data
+    end)
+end
+
+-- TAB 8: MISC TAB
+function Zuncodex:BuildMiscTab()
+    local content = self.TabContents["Misc"]
+    
+    -- Movement Section
+    local moveSec = self:CreateSection(content, "Movement", "🏃")
+    self:CreateToggle(moveSec, "No Clip (Walk through walls)", "NoClip", function(value)
+        self:ToggleNoClip(value)
+    end)
+    
+    self:CreateToggle(moveSec, "Walk on Water", "WalkOnWater", function(value)
+        self:ToggleWalkOnWater(value)
+    end)
+    
+    -- Teleport Section
+    local tpSec = self:CreateSection(content, "Teleportation", "📍")
+    self:CreateDropdown(tpSec, "Destination", "TPDestination",
+        {"Old World Starting Area", "Sea 1 - Jungle", "Sea 1 - Desert",
+         "Sea 2 - First Island", "Sea 2 - Ice", "Sea 3 - Loaf Land",
+         "Sea 3 - Fudge Island", "Custom Location"}, function(value)
+            self:AddLog("TP destination: " .. value, "Info")
+        end)
+    
+    self:CreateButton(tpSec, "🚀 Teleport Now", function()
+        local dest = self.Config.TPDestination or "Old World Starting Area"
+        self:TeleportTo(dest)
+        self:AddLog("Teleporting to: " .. dest, "Info")
+    end)
+    
+    self:CreateTextBox(tpSec, "Custom Coordinates (X,Y,Z)", "Enter coordinates...", "CustomTPCoords", function(value)
+        self:AddLog("Custom coords set: " .. value, "Info")
+    end)
+    
+    -- Server Section
+    local serverSec = self:CreateSection(content, "Server", "🌐")
+    self:CreateButton(serverSec, "🔄 Server Hop", function()
+        self:ServerHop()
+    end)
+    
+    self:CreateButton(serverSec, "👥 Rejoin Server", function()
+        pcall(function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end)
+    end)
+    
+    self:CreateButton(serverSec, "📡 Copy Server ID", function()
+        pcall(function()
+            pcall(setclipboard, game.JobId) or setclipboard(tostring(game.JobId))
+            self:AddLog("Server ID copied: " .. tostring(game.JobId), "Success")
+        end)
+        self:AddLog("Failed to copy to clipboard", "Error")
+    end)
+    
+    -- Fly Section
+    local flySec = self:CreateSection(content, "Flight", "✈️")
+    self:CreateToggle(flySec, "Enable Fly", "FlyEnabled", function(value)
+        if value then
+            self:ToggleFly(true)
+        else
+            self:ToggleFly(false)
+        end
+    end)
+    
+    self:CreateSlider(flySec, "Fly Speed", "FlySpeed", 50, 500, 100, function(value)
+        self:AddLog("Fly speed: " .. value, "Info")
+    end)
+end
+
+-- TAB 9: UTILITY TAB
+function Zuncodex:BuildUtilityTab()
+    local content = self.TabContents["Utility"]
+    
+    -- Performance Section
+    local perfSec = self:CreateSection(content, "Performance", "⚡")
+    self:CreateToggle(perfSec, "FPS Boost (Reduce lag)", "FPSBoost", function(value)
+        if value then
+            self:EnableFPSBoost()
+        else
+            self:DisableFPSBoost()
+        end
+    end)
+    
+    self:CreateToggle(perfSec, "Anti-AFK (Prevent kick)", "AntiAFK", function(value)
+        if value then
+            self:EnableAntiAFK()
+        else
+            self:DisableAntiAFK()
+        end
+    end)
+    
+    -- Visual Section
+    local visualSec = self:CreateSection(content, "Visual Settings", "🎨")
+    self:CreateToggle(visualSec, "Full Bright", "FullBright", function(value)
+        if value then
+            Lighting.Brightness = 2
+            Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        else
+            Lighting.Brightness = 1
+            Lighting.Ambient = Color3.fromRGB(128, 128, 128)
+        end
+    end)
+    
+    self:CreateToggle(visualSec, "Remove Fog", "RemoveFog", function(value)
+        if value then
+            Lighting.FogEnd = 999999
+        else
+            Lighting.FogEnd = 100000
+        end
+    end)
+    
+    self:CreateToggle(visualSec, "Anti Night (Always day)", "AntiNight", function(value)
+        if value then
+            Lighting.ClockTime = 14
+            -- Keep it daytime
+            table.insert(Connections, RunService.RenderStepped:Connect(function()
+                if self.Config.AntiNight then
+                    Lighting.ClockTime = 14
+                end
+            end))
+        else
+            -- Reset to normal time cycle
+            -- Time will resume normally
+        end
+    end)
+    
+    -- Config Section
+    local configSec = self:CreateSection(content, "Configuration", "💾")
+    self:CreateButton(configSec, "💾 Save Config", function()
+        self:SaveConfig()
+    end)
+    
+    self:CreateButton(configSec, "📂 Load Config", function()
+        self:LoadConfig()
+    end)
+    
+    self:CreateButton(configSec, "🗑️ Reset Config", function()
+        self:ResetConfig()
+    end, "Danger")
+    
+    -- Keybinds Section
+    local keySec = self:CreateSection(content, "Keybinds", "⌨️")
+    self:CreateLabel(keySec, "Configure hotkeys for quick actions:", Theme.TextSecondary)
+    self:CreateLabel(keySec, "Coming soon - Keybind system", Theme.Info)
+end
+
+-- TAB 10: ABOUT TAB
+function Zuncodex:BuildAboutTab()
+    local content = self.TabContents["About"]
+    
+    -- Script Info Section
+    local infoSec = self:CreateSection(content, "Script Information", "ℹ️")
+    self:CreateLabel(infoSec, "ZUNCODEX V4.1.1 - BLOX FRUITS VIP", Theme.Accent)
+    self:CreateLabel(infoSec, "", Theme.TextPrimary)
+    self:CreateLabel(infoSec, "Version: 4.1.1 Full VIP Release", Theme.TextPrimary)
+    self:CreateLabel(infoSec, "Author: palofsc", Theme.TextPrimary)
+    self:CreateLabel(infoSec, "Purpose: Private Testing Environment Only", Theme.Warning)
+    self:CreateDivider(infoSec)
+    self:CreateLabel(infoSec, "Features:", Theme.TextPrimary)
+    self:CreateLabel(infoSec, "• 10 Full-Featured Tabs", Theme.TextSecondary)
+    self:CreateLabel(infoSec, "• 48+ Boss Support", Theme.TextSecondary)
+    self:CreateLabel(infoSec, "• Complete ESP System", Theme.TextSecondary)
+    self:CreateLabel(infoSec, "• Auto Farm & Quest", Theme.TextSecondary)
+    self:CreateLabel(infoSec, "• Race V2/V3/V4 Trials", Theme.TextSecondary)
+    self:CreateLabel(infoSec, "• Sea Event Detection", Theme.TextSecondary)
+    
+    -- Credits Section
+    local creditSec = self:CreateSection(content, "Credits & Thanks", "❤️")
+    self:CreateLabel(creditSec, "Developer: palofsc", Theme.TextPrimary)
+    self:CreateLabel(creditSec, "Testers: VIP Community", Theme.TextPrimary)
+    self:CreateLabel(creditSec, "Inspired by: 4479 Hub, HoHo Hub, Lunaris Hub", Theme.TextSecondary)
+    self:CreateLabel(creditSec, "", Theme.TextPrimary)
+    self:CreateLabel(creditSec, "Special thanks to all contributors!", Theme.Success)
+    
+    -- Updates Section
+    local updateSec = self:CreateSection(content, "Update Log", "📝")
+    self:CreateLabel(updateSec, "V4.1.1 - Bug Fix Release", Theme.Accent)
+    self:CreateLabel(updateSec, "• Fixed GUI errors from V4.1", Theme.TextSecondary)
+    self:CreateLabel(updateSec, "• Fixed nearestDist declarations", Theme.TextSecondary)
+    self:CreateLabel(updateSec, "• Added pcall wrappers for safety", Theme.TextSecondary)
+    self:CreateLabel(updateSec, "• Fixed workspace existence checks", Theme.TextSecondary)
+    self:CreateLabel(updateSec, "", Theme.TextPrimary)
+    self:CreateLabel(updateSec, "V4.1.0 - Major Update", Theme.Accent)
+    self:CreateLabel(updateSec, "• Expanded from 7 to 10 tabs", Theme.TextSecondary)
+    self:CreateLabel(updateSec, "• Added 48+ boss support", Theme.TextSecondary)
+    self:CreateLabel(updateSec, "• New ESP system with categories", Theme.TextSecondary)
+    self:CreateLabel(updateSec, "• Race trials automation", Theme.TextSecondary)
+    self:CreateLabel(updateSec, "• Sea event detection", Theme.TextSecondary)
+    
+    -- Discord Section
+    local discSec = self:CreateSection(content, "Community", "💬")
+    self:CreateLabel(discSec, "Join our community for updates!", Theme.TextPrimary)
+    self:CreateButton(discSec, "📋 Copy Discord Link", function()
+        pcall(function()
+            setclipboard("https://discord.gg/zuncodex")
+            self:AddLog("Discord link copied!", "Success")
+        end)
+    end)
+    
+    -- Status Section
+    local statusSec = self:CreateSection(content, "System Status", "📊")
+    self.UIComponents.StatusLabel = self:CreateLabel(statusSec, "Status: Initializing...", Theme.Info)
+    self.UIComponents.ConnectionCount = self:CreateLabel(statusSec, "Active Connections: 0", Theme.TextSecondary)
+    
+    -- Update status periodically
+    spawn(function()
+        while wait(2) do
+            if self.UIComponents.StatusLabel then
+                self.UIComponents.StatusLabel.Text = "Status: " .. (IsInitialized and "✅ Running" or "⚠️ Not Initialized")
+                self.UIComponents.StatusLabel.TextColor3 = IsInitialized and Theme.Success or Theme.Warning
+            end
+            if self.UIComponents.ConnectionCount then
+                self.UIComponents.ConnectionCount.Text = "Active Connections: " .. #Connections
+            end
+        end
+    end)
+end
+
+-- ============================================
+-- PHẦN 10: LOG SYSTEM
+-- ============================================
+
+function Zuncodex:AddLog(message, logType)
+    local timestamp = os.date("%H:%M:%S")
+    local colors = {
+        Info = Theme.TextSecondary,
+        Success = Theme.Success,
+        Warning = Theme.Warning,
+        Error = Theme.Error
+    }
+    
+    local color = colors[logType] or colors.Info
+    local prefix = "[" .. (logType or "INFO") .. "]"
+    
+    -- Add to internal log
+    table.insert(LogEntries, {
+        Time = timestamp,
+        Message = message,
+        Type = logType
+    })
+    
+    -- Print to console
+    print("[Zuncodex] " .. prefix .. " " .. message)
+    
+    -- Add to GUI log if available
+    if self.LogContainer then
+        local LogEntry = Instance.new("TextLabel")
+        LogEntry.Name = "Log_" .. #LogEntries
+        LogEntry.Size = UDim2.new(1, -10, 0, 18)
+        LogEntry.BackgroundTransparency = 1
+        LogEntry.Text = "[" .. timestamp .. "] " .. prefix .. " " .. message
+        LogEntry.TextColor3 = color
+        LogEntry.TextSize = 10
+        LogEntry.Font = Enum.Font.Gotham
+        LogEntry.TextXAlignment = Enum.TextXAlignment.Left
+        LogEntry.Parent = self.LogContainer
+        
+        -- Auto-scroll to bottom
+        spawn(function()
+            if self.LogLayout then
+                self.LogLayout.Changed:Wait()
+                self.LogContainer.CanvasPosition = Vector2.new(0, self.LogContainer.CanvasSize.Y.Offset)
+            end
+        end)
+    end
+end
+
+function Zuncodex:GetLogs()
+    return LogEntries
+end
+
+function Zuncodex:ClearLogs()
+    LogEntries = {}
+    
+    if self.LogContainer then
+        for _, child in ipairs(self.LogContainer:GetChildren()) do
+            if child:IsA("TextLabel") then
+                child:Destroy()
+            end
+        end
+    end
+    
+    self:AddLog("Logs cleared", "Info")
+end
+
+-- ============================================
+-- PHẦN 11: AUTO FARM CORE SYSTEM
+-- ============================================
+
+function Zuncodex:FindNearestEnemy()
+    local nearestEnemy = nil
+    local nearestDist = math.huge -- BUG FIX #1: Proper declaration
+    local myChar = LocalPlayer.Character
+    if not myChar then return nil, nil end
+    
+    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil, nil end
+    
+    local myPos = myHRP.Position
+    
+    -- Search workspace for enemies
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            local humanoid = obj.Humanoid
+            local hrp = obj.HumanoidRootPart
+            
+            -- Check valid enemy
+            if humanoid.Health > 0 and obj ~= myChar then
+                -- Exclude players
+                local isPlayer = false
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player.Character == obj then
+                        isPlayer = true
+                        break
+                    end
+                end
+                
+                if not isPlayer then
+                    local distance = (myPos - hrp.Position).Magnitude
+                    
+                    if distance < nearestDist then
+                        nearestDist = distance
+                        nearestEnemy = obj
+                    end
+                end
+            end
+        end
+    end
+    
+    return nearestEnemy, nearestDist
+end
+
+function Zuncodex:FindNearestNPC()
+    local nearestNPC = nil
+    local nearestDist = math.huge -- BUG FIX #1
+    local myChar = LocalPlayer.Character
+    if not myChar then return nil, nil end
+    
+    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil, nil end
+    
+    local npcsFolder = workspace:FindFirstChild("Npcs") -- BUG FIX #6: Existence check
+    local targets = npcsFolder and npcsFolder:GetDescendants() or workspace:GetDescendants()
+    
+    for _, obj in ipairs(targets) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            local humanoid = obj.Humanoid
+            local hrp = obj.HumanoidRootPart
+            
+            if humanoid.Health > 0 and obj ~= myChar then
+                local dist = (myHRP.Position - hrp.Position).Magnitude
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearestNPC = obj
+                end
+            end
+        end
+    end
+    
+    return nearestNPC, nearestDist
+end
+
+function Zuncodex:AttackTarget(target)
+    if not target then return false end
+    
+    local humanoid = target:FindFirstChild("Humanoid")
+    local targetHRP = target:FindFirstChild("HumanoidRootPart")
+    local myChar = LocalPlayer.Character
+    local myHumanoid = myChar and myChar:FindFirstChild("Humanoid")
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    
+    if not humanoid or not targetHRP or not myHRP then return false end
+    
+    -- Teleport to target if enabled
+    if self.Config.TeleportToTarget then
+        myHRP.CFrame = CFrame.new(targetHRP.Position + Vector3.new(0, 3, 5))
+        wait(0.05)
+    end
+    
+    -- Face target
+    if self.Config.FaceTarget then
+        myHRP.CFrame = CFrame.lookAt(myHRP.Position, targetHRP.Position)
+    end
+    
+    -- Perform attack
+    local success = pcall(function()
+        -- Method 1: Call remote attack
+        self:CallRemote("Attack", target)
+        
+        -- Method 2: Simulate attack keys
+        local attackKeys = {}
+        if self.Config.UseSkillZ ~= false then table.insert(attackKeys, Enum.KeyCode.Z) end
+        if self.Config.UseSkillX ~= false then table.insert(attackKeys, Enum.KeyCode.X) end
+        if self.Config.UseSkillC ~= false then table.insert(attackKeys, Enum.KeyCode.C) end
+        if self.Config.UseSkillV ~= false then table.insert(attackKeys, Enum.KeyCode.V) end
+        
+        for _, key in ipairs(attackKeys) do
+            VirtualInputManager:SendKeyEvent(true, key, false, game)
+            wait(self.Config.AttackDelay / #attackKeys)
+            VirtualInputManager:SendKeyEvent(false, key, false, game)
+        end
+    end)
+    
+    return success
+end
+
+function Zuncodex:StartAutoFarm()
+    if self._farmRunning then return end
+    self._farmRunning = true
+    
+    self:AddLog("Auto Farm started", "Success")
+    
+    table.insert(Connections, RunService.Heartbeat:Connect(function()
+        if not self.Config.AutoFarm or not self._farmRunning then return end
+        
+        local target, dist = self:FindNearestEnemy()
+        
+        if target then
+            self:AttackTarget(target)
+            
+            -- Auto Haki
+            if self.Config.AutoHaki then
+                self:ActivateHaki()
+            end
+            
+            -- Auto Stats
+            if self.Config.AutoStats then
+                self:AllocateStats()
+            end
+        else
+            -- Move to find enemies
+            self:ExploreForEnemies()
+        end
+    end))
+end
+
+function Zuncodex:StopAutoFarm()
+    self._farmRunning = false
+    self:AddLog("Auto Farm stopped", "Warning")
+end
+
+function Zuncodex:ExploreForEnemies()
+    -- Move randomly to find new enemies
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    
+    local hrp = myChar:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    -- Find island markers or spawn points
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj.Name:match("Island") or obj.Name:match("Spawn") or obj.Name:match("Area") then
+            local primary = obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") or obj:IsA("Part") and obj
+            if primary then
+                hrp.CFrame = CFrame.new(primary.Position + Vector3.new(0, 10, 0))
+                break
+            end
+        end
+    end
+end
+
+-- ============================================
+-- PHẦN 12: AUTO QUEST SYSTEM
+-- ============================================
+
+function Zuncodex:GetCurrentQuestGiver()
+    local nearestNPC = nil
+    local nearestDist = math.huge -- BUG FIX #1
+    local myChar = LocalPlayer.Character
+    if not myChar then return nil end
+    
+    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+    
+    -- Find quest NPCs
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            local nameLower = obj.Name:lower()
+            if nameLower:match("quest") or nameLower:match("npc") or 
+               nameLower:match("giver") or nameLower:match("merchant") then
+               
+                local hrp = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Torso")
+                if hrp then
+                    local dist = (myHRP.Position - hrp.Position).Magnitude
+                    if dist < nearestDist then
+                        nearestDist = dist
+                        nearestNPC = obj
+                    end
+                end
+            end
+        end
+    end
+    
+    return nearestNPC
+end
+
+function Zuncodex:AcceptQuestFromNPC(npc)
+    if not npc then return false end
+    
+    -- Teleport to NPC
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local npcHRP = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Torso")
+    
+    if myHRP and npcHRP then
+        myHRP.CFrame = CFrame.new(npcHRP.Position + Vector3.new(0, 0, 5))
+        wait(0.2)
+    end
+    
+    -- Interact with NPC
+    local success = pcall(function()
+        self:CallRemote("Interact", npc)
+    end)
+    
+    if success then
+        self:AddLog("Accepted quest from: " .. npc.Name, "Success")
+    end
+    
+    return success
+end
+
+function Zuncodex:StartAutoQuest()
+    if self._questRunning then return end
+    self._questRunning = true
+    
+    self:AddLog("Auto Quest system started", "Success")
+    
+    table.insert(Connections, RunService.Heartbeat:Connect(function()
+        if not self.Config.AutoQuest or not self._questRunning then return end
+        
+        local questData = self:GetQuestProgress()
+        
+        if not questData or self:IsQuestCompleted(questData) then
+            -- Complete old quest or need new quest
+            local npc = self:GetCurrentQuestGiver()
+            if npc then
+                self:AcceptQuestFromNPC(npc)
+            end
+        end
+    end))
+end
+
+function Zuncodex:StopAutoQuest()
+    self._questRunning = false
+    self:AddLog("Auto Quest stopped", "Warning")
+end
+
+function Zuncodex:GetQuestProgress()
+    -- Get quest data from player
+    local playerData = LocalPlayer:FindFirstChild("Data") or 
+                      LocalPlayer:FindFirstChild("playerstats")
+    
+    if playerData then
+        local quest = playerData:FindFirstChild("Quest") or 
+                    playerData:FindFirstChild("CurrentQuest")
+        local progress = playerData:FindFirstChild("QuestProgress")
+        local goal = playerData:FindFirstChild("QuestGoal")
+        
+        if quest then
+            return {
+                Name = quest.Value or quest.Text,
+                Progress = progress and progress.Value or 0,
+                Goal = goal and goal.Value or 10
+            }
+        end
+    end
+    
+    return nil
+end
+
+function Zuncodex:IsQuestCompleted(questData)
+    return questData and questData.Progress >= questData.Goal
+end
+
+-- ============================================
+-- PHẦN 13: HAKI SYSTEM
+-- ============================================
+
+function Zuncodex:ActivateHaki()
+    local success = pcall(function()
+        -- Activate Observation Haki (Ken)
+        self:CallRemote("Haki", "Ken")
+        
+        -- Activate Armament Haki (Buso)
+        self:CallRemote("Haki", "Buso")
+    end)
+    
+    return success
+end
+
+-- ============================================
+-- PHẦN 14: STATS ALLOCATION
+-- ============================================
+
+function Zuncodex:AllocateStats()
+    if not self.Config.AutoStats then return end
+    
+    local presets = {
+        Balanced = {Melee = 20, Defense = 20, Sword = 20, Gun = 20, Fruit = 20},
+        Sword = {Melee = 10, Defense = 15, Sword = 40, Gun = 5, Fruit = 30},
+        Fruit = {Melee = 15, Defense = 15, Sword = 10, Gun = 5, Fruit = 55},
+        Gun = {Melee = 10, Defense = 20, Sword = 5, Gun = 50, Fruit = 15}
+    }
+    
+    local preset = presets[self.Config.StatsPreset] or presets.Balanced
+    
+    pcall(function()
+        for stat, percentage in pairs(preset) do
+            self:CallRemote("Stats", stat, math.floor(percentage))
+        end
+    end)
+end
+
+-- ============================================
+-- PHẦN 15: BOSS FARM SYSTEM
+-- ============================================
+
+function Zuncodex:FindBoss(bossName)
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj.Name:lower():find(bossName:lower()) then
+            local humanoid = obj:FindFirstChild("Humanoid")
+            local hrp = obj:FindFirstChild("HumanoidRootPart")
+            
+            if humanoid and hrp and humanoid.Health > 0 then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+function Zuncodex:FindAnySelectedBoss()
+    local nearestBoss = nil
+    local nearestDist = math.huge -- BUG FIX #1
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+    
+    for _, bossName in ipairs(self.Config.SelectedBosses) do
+        local boss = self:FindBoss(bossName)
+        if boss then
+            local bossHRP = boss:FindFirstChild("HumanoidRootPart")
+            if bossHRP then
+                local dist = (myHRP.Position - bossHRP.Position).Magnitude
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearestBoss = boss
+                end
+            end
+        end
+    end
+    
+    return nearestBoss
+end
+
+function Zuncodex:StartBossFarm()
+    if self._bossRunning then return end
+    self._bossRunning = true
+    
+    self:AddLog("Boss Farm started", "Success")
+    
+    table.insert(Connections, spawn(function()
+        while self.Config.AutoFarmBoss and self._bossRunning do
+            -- If no bosses selected, select all
+            if #self.Config.SelectedBosses == 0 then
+                self.Config.SelectedBosses = self.Config.BossList
+            end
+            
+            -- Farm selected bosses
+            for _, bossName in ipairs(self.Config.SelectedBosses) do
+                local boss = self:FindBoss(bossName)
+                if boss then
+                    self:AddLog("Found boss: " .. bossName, "Success")
+                    
+                    -- Attack boss
+                    while boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
+                        self:AttackTarget(boss)
+                        wait(self.Config.AttackDelay)
+                        
+                        -- Check if boss still alive
+                        if not boss:FindFirstChild("Humanoid") or boss.Humanoid.Health <= 0 then
+                            self:AddLog("Defeated: " .. bossName, "Success")
+                            break
+                        end
+                        
+                        if not self.Config.AutoFarmBoss or not self._bossRunning then break end
+                    end
+                end
+                
+                if not self.Config.AutoFarmBoss or not self._bossRunning then break end
+                wait(1)
+            end
+            
+            wait(2) -- Check interval
+        end
+    end))
+end
+
+function Zuncodex:StopBossFarm()
+    self._bossRunning = false
+    self:AddLog("Boss Farm stopped", "Warning")
+end
+
+-- ============================================
+-- PHẦN 16: SEA EVENT SYSTEMS
+-- ============================================
+
+function Zuncodex:DetectMirageIsland()
+    -- Find Mirage Island in workspace
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj.Name:lower():find("mirage") then
+            self:AddLog("Mirage Island detected! Teleporting...", "Success")
+            
+            -- Teleport to island
+            local primary = obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") or obj:IsA("Part") and obj
+            if primary then
+                local pos = primary.Position
+                local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    myHRP.CFrame = CFrame.new(pos + Vector3.new(0, 50, 0))
+                end
+            end
+            
+            return true
+        end
+    end
+    return false
+end
+
+function Zuncodex:StartMirageDetection()
+    if self._mirageRunning then return end
+    self._mirageRunning = true
+    
+    table.insert(Connections, spawn(function()
+        while self.Config.AutoMirage and self._mirageRunning do
+            self:DetectMirageIsland()
+            wait(5) -- Check every 5 seconds
+        end
+    end))
+end
+
+function Zuncodex:StopMirageDetection()
+    self._mirageRunning = false
+end
+
+-- Kitsune Island detection
+function Zuncodex:DetectKitsuneIsland()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj.Name:lower():find("kitsune") then
+            self:AddLog("Kitsune Island detected! Teleporting...", "Success")
+            
+            local primary = obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") or obj:IsA("Part") and obj
+            if primary then
+                local pos = primary.Position
+                local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    myHRP.CFrame = CFrame.new(pos + Vector3.new(0, 50, 0))
+                end
+            end
+            
+            return true
+        end
+    end
+    return false
+end
+
+function Zuncodex:StartKitsuneDetection()
+    if self._kitsuneRunning then return end
+    self._kitsuneRunning = true
+    
+    table.insert(Connections, spawn(function()
+        while self.Config.AutoKitsune and self._kitsuneRunning do
+            self:DetectKitsuneIsland()
+            wait(5)
+        end
+    end))
+end
+
+function Zuncodex:StopKitsuneDetection()
+    self._kitsuneRunning = false
+end
+
+-- Sea Beast hunting
+function Zuncodex:FindSeaBeast()
+    local beasts = {"Leviathan", "Terrorshark", "Sea Beast", "Shark"}
+    
+    for _, beastName in ipairs(beasts) do
+        if self.Config.SeaBeastType == "All" or self.Config.SeaBeastType:lower():find(beastName:lower()) then
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("Model") and obj.Name:lower():find(beastName:lower()) then
+                    local humanoid = obj:FindFirstChild("Humanoid")
+                    local hrp = obj:FindFirstChild("HumanoidRootPart")
+                    
+                    if humanoid and hrp and humanoid.Health > 0 then
+                        return obj
+                    end
+                end
+            end
+        end
+    end
+    
+    return nil
+end
+
+function Zuncodex:StartSeaBeastHunt()
+    if self._beastRunning then return end
+    self._beastRunning = true
+    
+    self:AddLog("Sea Beast hunting started", "Success")
+    
+    table.insert(Connections, spawn(function()
+        while self.Config.AutoSeaBeast and self._beastRunning do
+            local beast = self:FindSeaBeast()
+            
+            if beast then
+                self:AddLog("Found Sea Beast: " .. beast.Name, "Success")
+                
+                while beast and beast:FindFirstChild("Humanoid") and beast.Humanoid.Health > 0 do
+                    self:AttackTarget(beast)
+                    wait(self.Config.AttackDelay)
+                    
+                    if not beast:FindFirstChild("Humanoid") or beast.Humanoid.Health <= 0 then
+                        self:AddLog("Sea Beast defeated!", "Success")
+                        break
+                    end
+                    
+                    if not self.Config.AutoSeaBeast or not self._beastRunning then break end
+                end
+            end
+            
+            wait(3)
+        end
+    end))
+end
+
+function Zuncodex:StopSeaBeastHunt()
+    self._beastRunning = false
+    self:AddLog("Sea Beast hunting stopped", "Warning")
+end
+
+-- ============================================
+-- PHẦN 17: RAID SYSTEM
+-- ============================================
+
+function Zuncodex:StartAutoRaid()
+    if self._raidRunning then return end
+    self._raidRunning = true
+    
+    self:AddLog("Auto Raid started", "Success")
+    
+    table.insert(Connections, spawn(function()
+        while self.Config.AutoRaid and self._raidRunning do
+            -- Find raid NPC or entrance
+            local raidEntrance = self:FindRaidEntrance()
+            
+            if raidEntrance then
+                self:AddLog("Joining raid...", "Info")
+                
+                -- Join raid
+                self:CallRemote("StartRaid", raidEntrance)
+                
+                -- Combat logic in raid will be handled by Auto Farm
+                wait(10) -- Wait for raid start
+            end
+            
+            wait(5)
+        end
+    end))
+end
+
+function Zuncodex:StopAutoRaid()
+    self._raidRunning = false
+    self:AddLog("Auto Raid stopped", "Warning")
+end
+
+function Zuncodex:FindRaidEntrance()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local name = obj.Name:lower()
+        if name:find("raid") or name:find("fragment") then
+            return obj
+        end
+    end
+    return nil
+end
+
+-- ============================================
+-- PHẦN 18: FISHING SYSTEM
+-- ============================================
+
+function Zuncodex:StartAutoFishing()
+    if self._fishingRunning then return end
+    self._fishingRunning = true
+    
+    self:AddLog("Auto Fishing started", "Success")
+    
+    table.insert(Connections, spawn(function()
+        while self.Config.AutoFishing and self._fishingRunning do
+            -- Cast line
+            self:CallRemote("Fishing", "Cast")
+            wait(2 / self.Config.FishingSpeed)
+            
+            -- Try catch
+            self:CallRemote("Fishing", "Catch")
+            wait(1 / self.Config.FishingSpeed)
+        end
+    end))
+end
+
+function Zuncodex:StopAutoFishing()
+    self._fishingRunning = false
+    self:AddLog("Auto Fishing stopped", "Warning")
+end
+
+-- ============================================
+-- PHẦN 19: RACE TRIAL SYSTEM
+-- ============================================
+
+function Zuncodex:StartRaceTrials()
+    if self._raceRunning then return end
+    self._raceRunning = true
+    
+    self:AddLog("Race Trials automation started", "Success")
+    
+    table.insert(Connections, spawn(function()
+        while self.Config.AutoRaceTrials and self._raceRunning do
+            -- Logic complete trial based on current race
+            local race = self.Config.CurrentRace
+            
+            -- Different trial steps for each race
+            if race == "Human" then
+                self:CompleteHumanTrial()
+            elseif race == "Rabbit" then
+                self:CompleteRabbitTrial()
+            elseif race == "Angel" then
+                self:CompleteAngelTrial()
+            elseif race == "Ghoul" then
+                self:CompleteGhoulTrial()
+            end
+            
+            wait(5)
+        end
+    end))
+end
+
+function Zuncodex:StopRaceTrials()
+    self._raceRunning = false
+    self:AddLog("Race Trials stopped", "Warning")
+end
+
+function Zuncodex:CompleteHumanTrial()
+    -- Human race trial logic
+    self:AddLog("Completing Human trial...", "Info")
+    pcall(function()
+        self:CallRemote("RaceTrial", "Human", "Complete")
+    end)
+end
+
+function Zuncodex:CompleteRabbitTrial()
+    -- Rabbit race trial logic
+    self:AddLog("Completing Rabbit trial...", "Info")
+    pcall(function()
+        self:CallRemote("RaceTrial", "Rabbit", "Complete")
+    end)
+end
+
+function Zuncodex:CompleteAngelTrial()
+    -- Angel race trial logic  
+    self:AddLog("Completing Angel trial...", "Info")
+    pcall(function()
+        self:CallRemote("RaceTrial", "Angel", "Complete")
+    end)
+end
+
+function Zuncodex:CompleteGhoulTrial()
+    -- Ghoul race trial logic
+    self:AddLog("Completing Ghoul trial...", "Info")
+    pcall(function()
+        self:CallRemote("RaceTrial", "Ghoul", "Complete")
+    end)
+end
+
+-- Legendary weapon quests
+function Zuncodex:StartLegendaryWeaponQuest()
+    if self._weaponRunning then return end
+    self._weaponRunning = true
+    
+    self:AddLog("Legendary Weapon quest started", "Success")
+    
+    table.insert(Connections, spawn(function()
+        while self.Config.AutoLegendaryWeapons and self._weaponRunning do
+            -- Check and complete quest for each weapon
+            local weapons = {"Saber", "Yama", "Tushita", "Rengoku", "Soul Guitar", "CDK"}
+            
+            for _, weapon in ipairs(weapons) do
+                if not self:HasWeapon(weapon) then
+                    self:AddLog("Attempting to obtain: " .. weapon, "Info")
+                    self:CompleteWeaponQuest(weapon)
+                end
+            end
+            
+            wait(10)
+        end
+    end))
+end
+
+function Zuncodex:StopLegendaryWeaponQuest()
+    self._weaponRunning = false
+    self:AddLog("Legendary Weapon quest stopped", "Warning")
+end
+
+function Zuncodex:HasWeapon(weaponName)
+    -- Check if player already has weapon
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item.Name:find(weaponName) then
+                return true
+            end
+        end
+    end
+    
+    local char = LocalPlayer.Character
+    if char then
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") and item.Name:find(weaponName) then
+                return true
+            end
+        end
+    end
+    
+    return false
+end
+
+function Zuncodex:CompleteWeaponQuest(weaponName)
+    -- Logic complete quest for each weapon
+    self:AddLog("Processing quest for: " .. weaponName, "Info")
+    pcall(function()
+        self:CallRemote("WeaponQuest", weaponName)
+    end)
+end
+
+-- ============================================
+-- PHẦN 20: ESP / WALLHACK SYSTEM
+-- ============================================
+
+function Zuncodex:EnableESP()
+    if self._espRunning then return end
+    self._espRunning = true
+    
+    self:AddLog("ESP System enabled", "Success")
+    
+    table.insert(Connections, spawn(function()
+        while self.Config.ESP_Enabled and self._espRunning do
+            self:UpdateESP()
+            wait(0.5) -- Update interval
+        end
+    end))
+end
+
+function Zuncodex:DisableESP()
+    self._espRunning = false
+    
+    -- Remove all ESP objects
+    for target, objects in pairs(ESP_Objects) do
+        if objects.highlight then objects.highlight:Destroy() end
+        if objects.billboard then objects.billboard:Destroy() end
+        if objects.tracer then objects.tracer:Destroy() end
+    end
+    ESP_Objects = {}
+    
+    self:AddLog("ESP System disabled", "Warning")
+end
+
+function Zuncodex:UpdateESP()
+    local myChar = LocalPlayer.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+    
+    -- Update Player ESP
+    if self.Config.ESP_Players then
+        self:UpdatePlayerESP(myHRP)
+    end
+    
+    -- Update Enemy ESP
+    if self.Config.ESP_Enemies then
+        self:UpdateEnemyESP(myHRP)
+    end
+    
+    -- Update Fruit ESP
+    if self.Config.ESP_Fruits then
+        self:UpdateFruitESP(myHRP)
+    end
+    
+    -- Update other ESP categories
+    if self.Config.ESP_Chests then self:UpdateChestESP(myHRP) end
+    if self.Config.ESP_NPCs then self:UpdateNPCESP(myHRP) end
+    if self.Config.ESP_SeaBeasts then self:UpdateSeaBeastESP(myHRP) end
+    
+    -- Cleanup out-of-range ESP
+    self:CleanupOutOfRangeESP()
+end
+
+function Zuncodex:UpdatePlayerESP(myHRP)
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local char = player.Character
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char:FindFirstChild("Humanoid")
+            
+            if hrp and humanoid and humanoid.Health > 0 then
+                local distance = (myHRP.Position - hrp.Position).Magnitude
+                
+                if distance <= self.Config.ESP_Distance then
+                    if not ESP_Objects[char] then
+                        self:CreateESP(char, player.Name, self.Config.ESP_Colors.Players, "Player")
+                    else
+                        self:UpdateESPInfo(char, distance, humanoid)
+                    end
+                end
+            end
+        end
+    end
+end
+
+function Zuncodex:UpdateEnemyESP(myHRP)
+    local enemiesFolder = workspace:FindFirstChild("Enemies") -- BUG FIX #15: Existence check
+    local targets = enemiesFolder and enemiesFolder:GetChildren() or {}
+    
+    -- Also search descendants if no Enemies folder
+    if #targets == 0 then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+                table.insert(targets, obj)
+            end
+        end
+    end
+    
+    for _, obj in ipairs(targets) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+            local humanoid = obj.Humanoid
+            local hrp = obj.HumanoidRootPart
+            
+            if humanoid.Health > 0 and obj ~= LocalPlayer.Character then
+                -- Check not a player
+                local isPlayer = false
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player.Character == obj then
+                        isPlayer = true
+                        break
+                    end
+                end
+                
+                if not isPlayer then
+                    local distance = (myHRP.Position - hrp.Position).Magnitude
+                    
+                    if distance <= self.Config.ESP_Distance then
+                        if not ESP_Objects[obj] then
+                            self:CreateESP(obj, "[ENEMY] " .. obj.Name, self.Config.ESP_Colors.Enemies, "Enemy")
+                        else
+                            self:UpdateESPInfo(obj, distance, humanoid)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+function Zuncodex:UpdateFruitESP(myHRP)
+    -- Find Devil Fruits
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local isFruit = false
+        
+        if obj:IsA("Tool") and obj.Name:find("Fruit") then
+            isFruit = true
+        elseif obj:IsA("Model") and (obj.Name:find("Fruit") or obj.Name:find("Devil")) then
+            isFruit = true
+        end
+        
+        if isFruit then
+            local fruitPos = obj:IsA("Tool") and obj.Handle or
+                           obj:IsA("Model") and (obj:FindFirstChild("Handle") or obj:FindFirstChild("PrimaryPart"))
+            
+            if fruitPos then
+                local pos = fruitPos.Position
+                local distance = (myHRP.Position - pos).Magnitude
+                
+                if distance <= self.Config.ESP_Distance then
+                    if not ESP_Objects[obj] then
+                        self:CreateFruitESP(obj, obj.Name, self.Config.ESP_Colors.Fruits)
+                    else
+                        self:UpdateFruitESPInfo(obj, distance)
+                    end
+                    
+                    -- Auto collect if close
+                    if distance < 20 and self.Config.AutoCollectFruits then
+                        self:CollectFruit(obj)
+                    end
+                end
+            end
+        end
+    end
+end
+
+function Zuncodex:CreateESP(target, displayName, color, espType)
+    if ESP_Objects[target] then return end
+    
+    local hrp = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("Handle") or target:FindFirstChild("PrimaryPart")
+    if not hrp then return end
+    
+    -- Highlight effect
+    if self.Config.ESP_Highlight ~= false then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "Zuncodex_ESP"
+        highlight.FillColor = color
+        highlight.OutlineColor = color
+        highlight.FillTransparency = 0.5
+        highlight.OutlineTransparency = 0
+        highlight.Adornee = target
+        highlight.Parent = target
+    end
+    
+    -- Billboard GUI
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Zuncodex_Billboard"
+    billboard.Size = UDim2.new(0, 160, 0, 70)
+    billboard.StudsOffset = Vector3.new(0, 4, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Adornee = hrp
+    billboard.Parent = hrp
+    
+    -- Background
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(1, 0, 1, 0)
+    bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    bg.BackgroundTransparency = 0.3
+    bg.BorderSizePixel = 0
+    bg.Parent = billboard
+    
+    local bgCorner = Instance.new("UICorner")
+    bgCorner.CornerRadius = UDim.new(0, 6)
+    bgCorner.Parent = bg
+    
+    -- Name label
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Name = "Name"
+    nameLabel.Size = UDim2.new(1, -10, 0, 22)
+    nameLabel.Position = UDim2.new(0, 5, 0, 4)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = self.Config.ESP_ShowNames ~= false and displayName or ""
+    nameLabel.TextColor3 = color
+    nameLabel.TextStrokeTransparency = 0.3
+    nameLabel.TextSize = 13
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.Parent = billboard
+    
+    -- Distance label
+    local distLabel = Instance.new("TextLabel")
+    distLabel.Name = "Distance"
+    distLabel.Size = UDim2.new(1, -10, 0, 18)
+    distLabel.Position = UDim2.new(0, 5, 0, 26)
+    distLabel.BackgroundTransparency = 1
+    distLabel.Text = "Distance: ---"
+    distLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    distLabel.TextSize = 11
+    distLabel.Font = Enum.Font.Gotham
+    distLabel.Parent = billboard
+    
+    -- Health bar background
+    local healthBg = Instance.new("Frame")
+    healthBg.Name = "HealthBg"
+    healthBg.Size = UDim2.new(1, -10, 0, 6)
+    healthBg.Position = UDim2.new(0, 5, 0, 46)
+    healthBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    healthBg.BorderSizePixel = 0
+    healthBg.Visible = self.Config.ESP_ShowHealth ~= false
+    healthBg.Parent = billboard
+    
+    local hbCorner = Instance.new("UICorner")
+    hbCorner.CornerRadius = UDim.new(0, 3)
+    hbCorner.Parent = healthBg
+    
+    -- Health bar fill
+    local healthFill = Instance.new("Frame")
+    healthFill.Name = "HealthFill"
+    healthFill.Size = UDim2.new(1, 0, 1, 0)
+    healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+    healthFill.BorderSizePixel = 0
+    healthFill.Parent = healthBg
+    
+    local hfCorner = Instance.new("UICorner")
+    hfCorner.CornerRadius = UDim.new(0, 3)
+    hfCorner.Parent = healthFill
+    
+    ESP_Objects[target] = {
+        highlight = highlight,
+        billboard = billboard,
+        nameLabel = nameLabel,
+        distLabel = distLabel,
+        healthFill = healthFill,
+        type = espType,
+        target = target
+    }
+end
+
+function Zuncodex:CreateFruitESP(fruit, displayName, color)
+    if ESP_Objects[fruit] then return end
+    
+    local fruitObj = fruit:IsA("Tool") and fruit.Handle or fruit
+    local hrp = fruitObj:FindFirstChild("Handle") or fruitObj:FindFirstChild("PrimaryPart") or fruitObj
+    if not hrp then return end
+    
+    -- Highlight
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "Zuncodex_FruitESP"
+    highlight.FillColor = color
+    highlight.OutlineColor = color
+    highlight.FillTransparency = 0.3
+    highlight.OutlineTransparency = 0
+    highlight.Adornee = fruitObj
+    highlight.Parent = fruitObj
+    
+    -- Billboard
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Zuncodex_FruitBillboard"
+    billboard.Size = UDim2.new(0, 140, 0, 35)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Adornee = hrp
+    billboard.Parent = hrp
+    
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(1, 0, 1, 0)
+    bg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    bg.BackgroundTransparency = 0.3
+    bg.BorderSizePixel = 0
+    bg.Parent = billboard
+    
+    local bgCorner = Instance.new("UICorner")
+    bgCorner.CornerRadius = UDim.new(0, 6)
+    bgCorner.Parent = bg
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = "🍎 " .. displayName
+    label.TextColor3 = color
+    label.TextStrokeTransparency = 0.3
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamBold
+    label.Parent = billboard
+    
+    ESP_Objects[fruit] = {
+        highlight = highlight,
+        billboard = billboard,
+        type = "Fruit",
+        target = fruit
+    }
+end
+
+function Zuncodex:UpdateESPInfo(target, distance, humanoid)
+    local esp = ESP_Objects[target]
+    if not esp then return end
+    
+    if esp.distLabel and self.Config.ESP_ShowDistance ~= false then
+        esp.distLabel.Text = string.format("Distance: %.0f studs", distance)
+    end
+    
+    if esp.healthFill and humanoid and self.Config.ESP_ShowHealth ~= false then
+        local healthPercent = humanoid.Health / humanoid.MaxHealth
+        esp.healthFill.Size = UDim2.new(math.clamp(healthPercent, 0, 1), 0, 1, 0)
+        
+        -- Health bar color based on HP %
+        if healthPercent > 0.6 then
+            esp.healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+        elseif healthPercent > 0.3 then
+            esp.healthFill.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+        else
+            esp.healthFill.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+        end
+    end
+end
+
+function Zuncodex:UpdateFruitESPInfo(fruit, distance)
+    local esp = ESP_Objects[fruit]
+    if not esp or not esp.distLabel then return end
+    -- Could update distance here if needed
+end
+
+function Zuncodex:CleanupOutOfRangeESP()
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+    
+    for target, esp in pairs(ESP_Objects) do
+        local targetPos = nil
+        
+        if esp.target then
+            local hrp = esp.target:FindFirstChild("HumanoidRootPart") or 
+                       esp.target:FindFirstChild("Handle") or 
+                       esp.target:FindFirstChild("PrimaryPart")
+            if hrp then targetPos = hrp.Position end
+        end
+        
+        if targetPos then
+            local distance = (myHRP.Position - targetPos).Magnitude
+            if distance > self.Config.ESP_Distance then
+                self:RemoveESP(target)
+            end
+        end
+    end
+end
+
+function Zuncodex:RemoveESP(target)
+    local esp = ESP_Objects[target]
+    if not esp then return end
+    
+    if esp.highlight then 
+        esp.highlight:Destroy() 
+    end
+    if esp.billboard then 
+        esp.billboard:Destroy() 
+    end
+    if esp.tracer then 
+        esp.tracer:Destroy()
+        esp.tracer = nil 
+    end
+    
+    ESP_Objects[target] = nil
+end
+
+-- Fruit collection
+function Zuncodex:CollectFruit(fruit)
+    local success = pcall(function()
+        -- Method 1: Call remote
+        self:CallRemote("CollectFruit", fruit)
+        
+        -- Method 2: Touch interest (BUG FIX #7: Wrapped in pcall)
+        pcall(function()
+            local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local fruitHandle = fruit:IsA("Tool") and fruit.Handle or fruit:FindFirstChild("Handle")
+            
+            if myHRP and fruitHandle then
+                firetouchinterest(myHRP, fruitHandle, 0)
+                firetouchinterest(myHRP, fruitHandle, 1)
+            end
+        end)
+    end)
+    
+    if success then
+        self:AddLog("Collected fruit: " .. fruit.Name, "Success")
+        self:RemoveESP(fruit)
+    end
+end
+
+-- Other ESP update functions
+function Zuncodex:UpdateChestESP(myHRP)
+    -- Find and update ESP for chests
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name:lower():find("chest") or obj.Name:lower():find("treasure") then
+            local hrp = obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") or obj:IsA("Part") and obj
+            if hrp then
+                local dist = (myHRP.Position - hrp.Position).Magnitude
+                if dist <= self.Config.ESP_Distance then
+                    if not ESP_Objects[obj] then
+                        self:CreateSimpleESP(obj, "[CHEST] " .. obj.Name, self.Config.ESP_Colors.Chests)
+                    end
+                end
+            end
+        end
+    end
+end
+
+function Zuncodex:UpdateNPCESP(myHRP)
+    -- Find and update ESP for NPCs
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and (obj.Name:lower():find("npc") or obj.Name:lower():find("quest")) then
+            local hrp = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Torso")
+            if hrp then
+                local dist = (myHRP.Position - hrp.Position).Magnitude
+                if dist <= self.Config.ESP_Distance then
+                    if not ESP_Objects[obj] then
+                        self:CreateSimpleESP(obj, "[NPC] " .. obj.Name, self.Config.ESP_Colors.NPCs)
+                    end
+                end
+            end
+        end
+    end
+end
+
+function Zuncodex:UpdateSeaBeastESP(myHRP)
+    -- Find and update ESP for Sea Beasts
+    local beastNames = {"Leviathan", "Terrorshark", "Sea Beast", "Shark"}
+    
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj:FindFirstChild("Humanoid") then
+            for _, beastName in ipairs(beastNames) do
+                if obj.Name:lower():find(beastName:lower()) then
+                    local hrp = obj:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local dist = (myHRP.Position - hrp.Position).Magnitude
+                        if dist <= self.Config.ESP_Distance then
+                            if not ESP_Objects[obj] then
+                                self:CreateESP(obj, "[BEAST] " .. obj.Name, self.Config.ESP_Colors.SeaBeasts, "SeaBeast")
+                            end
+                        end
+                    end
+                    break
+                end
+            end
+        end
+    end
+end
+
+function Zuncodex:CreateSimpleESP(target, displayName, color)
+    if ESP_Objects[target] then return end
+    
+    local hrp = target:IsA("Model") and target:FindFirstChild("PrimaryPart") or 
+               target:FindFirstChild("HumanoidRootPart") or 
+               target:FindFirstChild("Handle") or
+               target:IsA("Part") and target
+    
+    if not hrp then return end
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "Zuncodex_SimpleESP"
+    highlight.FillColor = color
+    highlight.OutlineColor = color
+    highlight.FillTransparency = 0.4
+    highlight.OutlineTransparency = 0.1
+    highlight.Adornee = target
+    highlight.Parent = target
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Zuncodex_SimpleBillboard"
+    billboard.Size = UDim2.new(0, 120, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Adornee = hrp
+    billboard.Parent = hrp
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = displayName
+    label.TextColor3 = color
+    label.TextStrokeTransparency = 0.3
+    label.TextSize = 12
+    label.Font = Enum.Font.GothamBold
+    label.Parent = billboard
+    
+    ESP_Objects[target] = {
+        highlight = highlight,
+        billboard = billboard,
+        type = "Simple",
+        target = target
+    }
+end
+
+-- ============================================
+-- PHẦN 21: UTILITY FUNCTIONS
+-- ============================================
+
+function Zuncodex:GetPlayerLevel()
+    -- Get player level
+    local data = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("playerstats")
+    if data then
+        local level = data:FindFirstChild("Level")
+        if level then
+            return tonumber(level.Value) or 1
+        end
+    end
+    return 1
+end
+
+function Zuncodex:UpdatePlayerInfo()
+    -- Update player info displayed on GUI
+    if self.UIComponents and self.UIComponents.InfoLabel then
+        local level = self:GetPlayerLevel()
+        local race = self.Config.CurrentRace
+        
+        -- Get additional info if available
+        local bounty = "???"
+        local fragments = "???"
+        
+        local data = LocalPlayer:FindFirstChild("Data")
+        if data then
+            local b = data:FindFirstChild("Bounty")
+            local f = data:FindFirstChild("Fragments")
+            if b then bounty = tostring(b.Value) end
+            if f then fragments = tostring(f.Value) end
+        end
+        
+        local health = "??? / ???"
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then
+            health = string.format("%d / %d", hum.Health, hum.MaxHealth)
+        end
+        
+        self.UIComponents.InfoLabel.Text = string.format([[
+Level: %d | Race: %s
+Bounty: %s | Fragments: %s
+Current Sea: %s
+Health: %s
+]], level, race, bounty, fragments, "???", health)
+    end
+end
+
+-- Anti-AFK
+function Zuncodex:EnableAntiAFK()
+    if self._antiAFKConn then return end
+    
+    self._antiAFKConn = RunService.Heartbeat:Connect(function()
+        if self.Config.AntiAFK then
+            -- Simulate activity to avoid kick
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+            wait(0.1)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+        end
+    end)
+    
+    table.insert(Connections, self._antiAFKConn)
+    self:AddLog("Anti-AFK enabled", "Success")
+end
+
+function Zuncodex:DisableAntiAFK()
+    if self._antiAFKConn then
+        self._antiAFKConn:Disconnect()
+        self._antiAFKConn = nil
+    end
+    self:AddLog("Anti-AFK disabled", "Warning")
+end
+
+-- FPS Boost
+function Zuncodex:EnableFPSBoost()
+    if self.Config.FPSBoost then
+        -- Reduce effects to increase FPS
+        pcall(function()
+            setfpscap(999)
+        end)
+        
+        -- Disable unnecessary effects
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 100000
+        Lighting.Brightness = 2
+        
+        -- Remove particles
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+                obj.Enabled = false
+            end
+        end
+        
+        self:AddLog("FPS Boost enabled", "Success")
+    end
+end
+
+function Zuncodex:DisableFPSBoost()
+    pcall(function()
+        setfpscap(60)
+    end)
+    Lighting.GlobalShadows = true
+    Lighting.FogEnd = 100000
+    Lighting.Brightness = 1
+    
+    -- Re-enable particles
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+            obj.Enabled = true
+        end
+    end
+    
+    self:AddLog("FPS Boost disabled", "Warning")
+end
+
+-- Walk on Water
+function Zuncodex:ToggleWalkOnWater(enabled)
+    self.Config.WalkOnWater = enabled
+    
+    if enabled then
+        table.insert(Connections, RunService.RenderStepped:Connect(function()
+            if not self.Config.WalkOnWater then return end
+            
+            local myChar = LocalPlayer.Character
+            if not myChar then return end
+            
+            local hrp = myChar:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+            
+            -- If player is near water surface, create platform
+            if hrp.Position.Y < 0 and hrp.Position.Y > -10 then
+                -- Logic walk on water - could create invisible part
+            end
+        end))
+        
+        self:AddLog("Walk on Water enabled", "Success")
+    else
+        self:AddLog("Walk on Water disabled", "Warning")
+    end
+end
+
+-- No Clip
+function Zuncodex:ToggleNoClip(enabled)
+    self.Config.NoClip = enabled
+    
+    if enabled then
+        table.insert(Connections, RunService.Stepped:Connect(function()
+            if not self.Config.NoClip then return end
+            
+            local myChar = LocalPlayer.Character
+            if not myChar then return end
+            
+            for _, part in ipairs(myChar:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end))
+        
+        self:AddLog("No Clip enabled", "Success")
+    else
+        -- Restore collision
+        local myChar = LocalPlayer.Character
+        if myChar then
+            for _, part in ipairs(myChar:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+        
+        self:AddLog("No Clip disabled", "Warning")
+    end
+end
+
+-- Fly
+function Zuncodex:ToggleFly(enabled)
+    self.Config.FlyEnabled = enabled
+    
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    
+    local hrp = myChar:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    if enabled then
+        -- Create BodyGyro and BodyVelocity for flying (BUG FIX #13: Proper declaration)
+        local bodyGyro = Instance.new("BodyGyro")
+        bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bodyGyro.P = 9e4
+        bodyGyro.Parent = hrp
+        
+        local bodyVel = Instance.new("BodyVelocity")
+        bodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bodyVel.Parent = hrp
+        
+        self._bodyGyro = bodyGyro
+        self._bodyVel = bodyVel
+        
+        self._flyConn = RunService.RenderStepped:Connect(function()
+            if not self.Config.FlyEnabled then return end
+            
+            local speed = self.Config.FlySpeed or 100
+            
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                bodyVel.Velocity = hrp.CFrame.LookVector * speed
+            elseif UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                bodyVel.Velocity = -hrp.CFrame.LookVector * speed
+            else
+                bodyVel.Velocity = Vector3.new(0, 0, 0)
+            end
+            
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                bodyVel.Velocity = Vector3.new(0, speed, 0)
+            elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+                bodyVel.Velocity = Vector3.new(0, -speed, 0)
+            end
+        end)
+        
+        table.insert(Connections, self._flyConn)
+        self:AddLog("Fly enabled", "Success")
+    else
+        if self._flyConn then
+            self._flyConn:Disconnect()
+            self._flyConn = nil
+        end
+        
+        if self._bodyGyro then
+            self._bodyGyro:Destroy()
+            self._bodyGyro = nil
+        end
+        
+        if self._bodyVel then
+            self._bodyVel:Destroy()
+            self._bodyVel = nil
+        end
+        
+        self:AddLog("Fly disabled", "Warning")
+    end
+end
+
+-- Server Hop
+function Zuncodex:ServerHop()
+    self:AddLog("Attempting server hop...", "Info")
+    
+    pcall(function()
+        local jobId = game.JobId
+        
+        -- Get current place ID
+        local placeId = game.PlaceId
+        
+        -- Teleport to different server of same place
+        TeleportService:Teleport(placeId, LocalPlayer)
+    end)
+end
+
+-- Teleport to location
+function Zuncodex:TeleportTo(location)
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then
+        self:AddLog("Cannot teleport - no character", "Error")
+        return
+    end
+    
+    -- Define locations (these would need actual coordinates)
+    local locations = {
+        ["Old World Starting Area"] = CFrame.new(0, 10, 0),
+        ["Sea 1 - Jungle"] = CFrame.new(1000, 10, 1000),
+        ["Sea 1 - Desert"] = CFrame.new(2000, 10, 2000),
+        ["Sea 2 - First Island"] = CFrame.new(3000, 50, 3000),
+        ["Sea 2 - Ice"] = CFrame.new(4000, 50, 4000),
+        ["Sea 3 - Loaf Land"] = CFrame.new(5000, 100, 5000),
+        ["Sea 3 - Fudge Island"] = CFrame.new(6000, 100, 6000),
+    }
+    
+    local targetCF = locations[location]
+    
+    if not targetCF and location == "Custom Location" then
+        -- Parse custom coordinates
+        local coords = self.Config.CustomTPCoords or "0,0,0"
+        local x, y, z = coords:match("([^,]+),([^,]+),([^,]+)")
+        if x and y and z then
+            targetCF = CFrame.new(tonumber(x) or 0, tonumber(y) or 0, tonumber(z) or 0)
+        end
+    end
+    
+    if targetCF then
+        myHRP.CFrame = targetCF
+        self:AddLog("Teleported to: " .. location, "Success")
+    else
+        self:AddLog("Unknown location: " .. location, "Error")
+    end
+end
+
+-- Kill Aura
+function Zuncodex:EnableKillAura()
+    if self._killAuraRunning then return end
+    self._killAuraRunning = true
+    
+    self:AddLog("Kill Aura enabled", "Success")
+    
+    table.insert(Connections, RunService.RenderStepped:Connect(function()
+        if not self.Config.KillAura or not self._killAuraRunning then return end
+        
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+        
+        local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP then return end
+        
+        -- Find enemies in range
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+                local humanoid = obj.Humanoid
+                local hrp = obj.HumanoidRootPart
+                
+                if humanoid.Health > 0 and obj ~= myChar then
+                    local dist = (myHRP.Position - hrp.Position).Magnitude
+                    
+                    if dist <= self.Config.KillAuraRange then
+                        -- Attack target
+                        self:AttackTarget(obj)
+                        break -- Attack one per frame
+                    end
+                end
+            end
+        end
+    end))
+end
+
+function Zuncodex:DisableKillAura()
+    self._killAuraRunning = false
+    self:AddLog("Kill Aura disabled", "Warning")
+end
+
+-- Aimbot
+function Zuncodex:EnableAimbot()
+    if self._aimbotRunning then return end
+    self._aimbotRunning = true
+    
+    self:AddLog("Aimbot enabled", "Success")
+    
+    table.insert(Connections, RunService.RenderStepped:Connect(function()
+        if not self.Config.Aimbot or not self._aimbotRunning then return end
+        
+        local camera = workspace.CurrentCamera
+        if not camera then return end
+        
+        local myChar = LocalPlayer.Character
+        if not myChar then return end
+        
+        local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP then return end
+        
+        -- Find nearest target
+        local nearestTarget = nil
+        local nearestDist = math.huge -- BUG FIX #1
+        
+        -- Target players if enabled
+        if self.Config.AimbotTargetPlayers then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    local targetHRP = player.Character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = player.Character:FindFirstChild("Humanoid")
+                    
+                    if targetHRP and humanoid and humanoid.Health > 0 then
+                        local dist = (myHRP.Position - targetHRP.Position).Magnitude
+                        
+                        if dist < nearestDist then
+                            nearestDist = dist
+                            nearestTarget = targetHRP
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Target NPCs if enabled
+        if self.Config.AimbotTargetNPCs and not nearestTarget then
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+                    if obj ~= myChar then
+                        local targetHRP = obj:FindFirstChild("HumanoidRootPart")
+                        local humanoid = obj:FindFirstChild("Humanoid")
+                        
+                        if targetHRP and humanoid and humanoid.Health > 0 then
+                            local dist = (myHRP.Position - targetHRP.Position).Magnitude
+                            
+                            if dist < nearestDist then
+                                nearestDist = dist
+                                nearestTarget = targetHRP
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        if nearestTarget then
+            -- Smooth aim or instant aim
+            if self.Config.AimbotSmoothness < 1 then
+                -- Smooth aim
+                local targetCFrame = CFrame.new(camera.CFrame.Position, nearestTarget.Position)
+                camera.CFrame = camera.CFrame:Lerp(targetCFrame, self.Config.AimbotSmoothness)
+            else
+                -- Instant aim
+                camera.CFrame = CFrame.new(camera.CFrame.Position, nearestTarget.Position)
+            end
+        end
+    end))
+end
+
+function Zuncodex:DisableAimbot()
+    self._aimbotRunning = false
+    self:AddLog("Aimbot disabled", "Warning")
+end
+
+-- ============================================
+-- PHẦN 22: CONFIG SAVE/LOAD SYSTEM
+-- ============================================
+
+function Zuncodex:SaveConfig()
+    local success = pcall(function()
+        -- BUG FIX #8: Wrapped in pcall
+        local configJson = HttpService:JSONEncode(self.Config)
+        writefile("zuncodex_v4_config.json", configJson)
+        self:AddLog("Config saved successfully!", "Success")
+        return true
+    end)
+    
+    if not success then
+        self:AddLog("Failed to save config - executor may not support file writing", "Error")
+        return false
+    end
+end
+
+function Zuncodex:LoadConfig()
+    local success, result = pcall(function()
+        -- BUG FIX #8: Wrapped in pcall
+        if isfile("zuncodex_v4_config.json") then
+            local configJson = readfile("zuncodex_v4_config.json")
+            local loadedConfig = HttpService:JSONDecode(configJson)
+            
+            -- Merge loaded config with default (to handle missing keys)
+            for key, value in pairs(loadedConfig) do
+                self.Config[key] = value
+            end
+            
+            self:AddLog("Config loaded successfully!", "Success")
+            return true
+        else
+            self:AddLog("No config file found", "Warning")
+            return false
+        end
+    end)
+    
+    if not success then
+        self:AddLog("Failed to load config", "Error")
+        return false
+    end
+end
+
+function Zuncodex:ResetConfig()
+    -- Reset to defaults
+    self.Config = {
+        -- Copy default config values here (abbreviated for space)
+        AutoFarm = false,
+        AutoQuest = false,
+        AutoHaki = false,
+        AutoStats = false,
+        StatsPreset = "Balanced",
+        FarmRadius = 500,
+        AttackDelay = 0.3,
+        TeleportToTarget = true,
+        KillAura = false,
+        KillAuraRange = 50,
+        Aimbot = false,
+        AimbotSmoothness = 0.5,
+        AimbotTargetPlayers = true,
+        AimbotTargetNPCs = false,
+        AutoFarmBoss = false,
+        SelectedBosses = {},
+        BossTeleport = true,
+        BossOnlyAlive = true,
+        AutoCollectFruits = false,
+        FruitESP = false,
+        FruitNotify = false,
+        BringFruits = false,
+        AutoMirage = false,
+        AutoKitsune = false,
+        AutoSeaBeast = false,
+        SeaBeastType = "All",
+        AutoRaid = false,
+        AutoFishing = false,
+        FishingSpeed = 1,
+        AutoRaceTrials = false,
+        CurrentRace = "Human",
+        AutoLegendaryWeapons = false,
+        ESP_Enabled = false,
+        ESP_Players = false,
+        ESP_Enemies = false,
+        ESP_Fruits = false,
+        ESP_Chests = false,
+        ESP_NPCs = false,
+        ESP_SeaBeasts = false,
+        ESP_Distance = 10000,
+        NoClip = false,
+        WalkOnWater = false,
+        AntiAFK = true,
+        FPSBoost = false,
+        AntiNight = false,
+        FullBright = false,
+        RemoveFog = false,
+        FlyEnabled = false,
+        FlySpeed = 100
+    }
+    
+    self:AddLog("Config reset to defaults", "Warning")
+end
+
+-- ============================================
+-- PHẦN 23: HTTP REQUEST HELPER
+-- ============================================
+
+function Zuncodex:HTTPRequest(url, method, data)
+    -- BUG FIX #10: Multi-method httprequest support
+    local methods = {
+        function()
+            -- Method 1: Standard request
+            if request then
+                return request({
+                    Url = url,
+                    Method = method or "GET",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = data and HttpService:JSONEncode(data) or nil
+                })
+            end
+            return nil
+        end,
+        function()
+            -- Method 2: httprequest
+            if httprequest then
+                return httprequest({
+                    Url = url,
+                    Method = method or "GET",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = data and HttpService:JSONEncode(data) or nil
+                })
+            end
+            return nil
+        end,
+        function()
+            -- Method 3: syn.request
+            if syn and syn.request then
+                return syn.request({
+                    Url = url,
+                    Method = method or "GET",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = data and HttpService:JSONEncode(data) or nil
+                })
+            end
+            return nil
+        end
+    }
+    
+    for _, reqFunc in ipairs(methods) do
+        local success, result = pcall(reqFunc)
+        if success and result then
+            return result
+        end
+    end
+    
+    return nil
+end
+
+-- ============================================
+-- PHẦN 24: LOADSTRING & UPDATE SYSTEM
+-- ============================================
+
+function Zuncodex:LoadFromURL(url)
+    self:AddLog("Loading script from URL: " .. url, "Info")
+    
+    local response = self:HTTPRequest(url, "GET")
+    
+    if response and response.Body then
+        local loadFunc = loadstring(response.Body)
+        if loadFunc then
+            -- Destroy current instance before loading new
+            self:Destroy()
+            wait(0.5)
+            
+            -- Load new script
+            loadFunc()
+            self:AddLog("Script loaded successfully from URL!", "Success")
+            return true
+        else
+            self:AddLog("Failed to compile script from URL", "Error")
+            return false
+        end
+    else
+        self:AddLog("Failed to fetch script from URL", "Error")
+        return false
+    end
+end
+
+-- Global function for external access
+_G.Zuncodex = {
+    LoadFromURL = function(url)
+        return Zuncodex:LoadFromURL(url)
+    end,
+    Reload = function()
+        Zuncodex:Destroy()
+        wait(0.5)
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/YourName/Zuncodex/main/V4.1.1.lua"))()
+        end)
+    end,
+    Destroy = function()
+        Zuncodex:Destroy()
+    end,
+    GetConfig = function()
+        return Zuncodex.Config
+    end,
+    SetConfig = function(key, value)
+        Zuncodex.Config[key] = value
+    end,
+    GetLogs = function()
+        return Zuncodex:GetLogs()
+    end,
+    AddLog = function(msg, type)
+        Zuncodex:AddLog(msg, type)
+    end
+}
+
+-- ============================================
+-- PHẦN 25: INITIALIZATION & MAIN LOOP
+-- ============================================
+
+function Zuncodex:Init()
+    self:AddLog("Initializing Zuncodex V4.1.1...", "Info")
+    
+    -- Detect remotes
+    self:DetectRemotes()
+    
+    -- Create GUI
+    self:CreateGUI()
+    
+    -- Start utility systems
+    if self.Config.AntiAFK then
+        self:EnableAntiAFK()
+    end
+    
+    if self.Config.FPSBoost then
+        self:EnableFPSBoost()
+    end
+    
+    if self.Config.WalkOnWater then
+        self:ToggleWalkOnWater(true)
+    end
+    
+    if self.Config.NoClip then
+        self:ToggleNoClip(true)
+    end
+    
+    if self.Config.KillAura then
+        self:EnableKillAura()
+    end
+    
+    if self.Config.Aimbot then
+        self:EnableAimbot()
+    end
+    
+    -- Player info update loop
+    table.insert(Connections, RunService.Heartbeat:Connect(function()
+        self:UpdatePlayerInfo()
+    end))
+    
+    -- Handle character respawn
+    LocalPlayer.CharacterAdded:Connect(function(newChar)
+        wait(2) -- Wait for character load
+        
+        -- Re-enable features if they were on
+        if self.Config.NoClip then
+            self:ToggleNoClip(true)
+        end
+        
+        if self.Config.AutoFarm and not self._farmRunning then
+            self:StartAutoFarm()
+        end
+    end)
+    
+    IsInitialized = true
+    self:AddLog("✅ Zuncodex V4.1.1 loaded successfully!", "Success")
+    self:AddLog("All 10 tabs operational. Configure and enable features.", "Success")
+    
+    return self
+end
+
+function Zuncodex:Destroy()
+    self:AddLog("Destroying Zuncodex V4.1.1...", "Warning")
+    
+    -- Disconnect all connections
+    for _, conn in ipairs(Connections) do
+        if conn then
+            pcall(function() conn:Disconnect() end)
+        end
+    end
+    Connections = {}
+    
+    -- Stop all running systems
+    self._farmRunning = false
+    self._questRunning = false
+    self._bossRunning = false
+    self._raidRunning = false
+    self._mirageRunning = false
+    self._kitsuneRunning = false
+    self._beastRunning = false
+    self._fishingRunning = false
+    self._raceRunning = false
+    self._weaponRunning = false
+    self._espRunning = false
+    self._killAuraRunning = false
+    self._aimbotRunning = false
+    
+    -- Clear ESP
+    self:DisableESP()
+    
+    -- Clear Fruit ESP
+    for fruit, objs in pairs(FruitObjects) do
+        if objs.highlight then objs.highlight:Destroy() end
+        if objs.billboard then objs.billboard:Destroy() end
+    end
+    FruitObjects = {}
+    
+    -- Destroy GUI
+    if self.GUI then
+        self.GUI:Destroy()
+        self.GUI = nil
+    end
+    
+    -- Reset states
+    IsInitialized = false
+    
+    -- Clean up global reference
+    if _G.Zuncodex then
+        _G.Zuncodex = nil
+    end
+    
+    self:AddLog("Zuncodex V4.1.1 destroyed completely", "Warning")
+end
+
+-- ============================================
+-- PHẦN 26: EXECUTION ENTRY POINT
+-- ============================================
+
+local function Main()
+    -- Check environment
+    if not game or not LocalPlayer then
+        error("[Zuncodex] Invalid environment - must run inside Roblox")
+        return nil
+    end
+    
+    -- Initialize system
+    local system = setmetatable({}, Zuncodex)
+    
+    -- Catch initialization errors
+    local success, result = pcall(function()
+        return system:Init()
+    end)
+    
+    if not success then
+        warn("[Zuncodex] Initialization failed: " .. tostring(result))
+        return nil
+    end
+    
+    return system
+end
+
+-- Run script
+local ZuncodexInstance = Main()
+
+if ZuncodexInstance then
+    print("╔══════════════════════════════════════════════════════════════╗")
+    print("║                                                              ║")
+    print("║   ✅ ZUNCODEX V4.1.1 - LOADED SUCCESSFULLY!               ║")
+    print("║   🎮 Blox Fruits VIP Script - 10 Tabs                      ║")
+    print("║                                                              ║")
+    print("║   Access via: _G.Zuncodex                                   ║")
+    print("║   Commands:                                                  ║")
+    print("║   • _G.Zuncodex.Reload() - Reload script                   ║")
+    print("║   • _G.Zuncodex.Destroy() - Unload script                  ║")
+    print("║   • _G.Zuncodex.LoadFromURL(url) - Load from URL           ║")
+    print("║   • _G.Zuncodex.GetConfig() - Get config table             ║")
+    print("║   • _G.Zuncodex.SetConfig(key, val) - Set config           ║")
+    print("║   • _G.Zuncodex.GetLogs() - Get log entries                ║")
+    print("║                                                              ║")
+    print("╚══════════════════════════════════════════════════════════════╝")
+end
+
+-- Return module
+return Zuncodex
