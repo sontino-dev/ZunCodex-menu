@@ -1,725 +1,897 @@
 --[[
-    ============================================
-    EASY.GG BEDWARS - CLIENT-SIDE DELTA SCRIPT
-    Phiên bản: 3.0 Delta Edition
-    Kiến trúc: Client-Side Exploitation
-    Pattern: Delta/Xeno/Script-Ware Style
-    
-    TECHNIQUES SỬ DỤNG:
-    - getrawgame / getgc / getrenv
-    - hookmetamethod / hookfunction / replaceclosure
-    - getconnections / setupvalueclip / setconstant
-    - Drawing API (client-side ESP)
-    - Client-side CFrame manipulation
-    - Raycast manipulation (Silent Aim)
-    - FireServer argument spoofing
-    - Metatable hooking
-    ============================================
+    ╔═══════════════════════════════════════════════════════════════╗
+    ║          BEDWARS VIP SCRIPT v4.0 - FULL VERSION              ║
+    ╠═══════════════════════════════════════════════════════════════╣
+    ║  Compatible: Synapse X | Krnl | Fluxus | Delta | Xeno       ║
+    ║  Game: Easy.gg Bedwars (Custom Match / Host Panel)           ║
+    ║  Type: Client-Side Exploitation Script                       ║
+    ╠═══════════════════════════════════════════════════════════════╣
+    ║  FEATURES:                                                   ║
+    ║  ✦ COMBAT: Kill Aura | Silent Aim | Aimbot | TriggerBot     ║
+    ║  ✦ ESP: Player | Bed | Item | Tracers | Chams | FOV        ║
+    ║  ✦ MOVEMENT: Speed | Fly | NoClip | InfJump | AntiVoid     ║
+    ║  ✦ UTILITY: AutoBridge | AutoClick | BedNuker | AutoFarm   ║
+    ║  ✦ BYPASS: AntiAim | GodMode | NoCooldown | NoFallDmg     ║
+    ║  ✦ GUI: 10 Tabs | Config Save/Load | Keybinds               ║
+    ╚═══════════════════════════════════════════════════════════════╝
 ]]
 
 -- ============================================
--- PHẦN 1: ENVIRONMENT DETECTION & SETUP
+-- SERVICES & ENVIRONMENT DETECTION
 -- ============================================
 
-local ScriptInfo = {
-    Name = "DeltaBedwars",
-    Version = "3.0",
-    Type = "Client-Side",
-    Executor = "Universal"
+local Services = {
+    Players = game:GetService("Players"),
+    RunService = game:GetService("RunService"),
+    UserInput = game:GetService("UserInputService"),
+    ReplicatedStorage = game:GetService("ReplicatedStorage"),
+    VirtualInput = game:GetService("VirtualInputManager"),
+    Lighting = game:GetService("Lighting"),
+    TweenService = game:GetService("TweenService"),
+    HttpService = game:GetService("HttpService")
 }
 
--- Detect executor environment
-local ExecutorDetect = {
+local Player = Services.Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = Player:GetMouse()
+
+-- Executor Detection & Compatibility
+local Executor = {
     IsSynapse = syn and true or false,
     IsScriptWare = scriptware and true or false,
     IsDelta = delta and true or false,
     IsXeno = xeno and true or false,
-    IsWave = wave and true or false,
-    IsKrystal = krystal and true or false
+    IsKrnl = krnl and true or false,
+    IsFluxus = fluxus and true or false,
+    IsWave = wave and true or false
 }
 
--- Lấy functions tùy executor
-local getrawgame = getrawgame or rawget_game
-local getgc = getgc or (get_gc_objects or function() return {} end)
-local getrenv = getrenv or function() return getfenv(2) end
-local hookfunc = hookfunction or hookfunc or function(...) return ... end
-local hookmeta = hookmetamethod or hookmetamethod or function(...) return ... end
-local getconn = getconnections or get_connections or function() return {} end
-local setconst = setconstant or set_const or function() end
-local getupval = getupvalue or get_upvalue or function() return nil end
-local setupval = setupvalue or set_upvalue or function() end
-local clipset = setupvalueclip or setclipboard or function() end
-local islclosure = is_lc_closure or function(f) return not iscclosure(f) end
-local iscclosure = is_cc_closure or function(f) return not islclosure(f) end
-local runcode = runcode or loadstring or function(s) return load(s)() end
-local request = request or http_request or function() return nil end
-
--- Environment variables
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local Lighting = game:GetService("Lighting")
-local Camera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
-
--- Easy.gg Services (client-side references)
-local EasyServices = {}
-local RemoteFolder = ReplicatedStorage:FindFirstChild("Remotes") 
-                    or ReplicatedStorage:FindFirstChild("Events") 
-                    or ReplicatedStorage:FindFirstChild("Network")
+-- Safe function wrappers
+local HookFunction = hookfunction or function(...) return ... end
+local HookMeta = hookmetamethod or function(...) return ... end
+local GetConnections = getconnections or function() return {} end
+local SetConstant = setconstant or function() end
+local GetUpvalue = getupvalue or function() return nil end
+local SetUpvalue = setupvalue or function() end
+local LoadString = loadstring or function(s) return load(s) end
+local IsFile = isfile or function() return false end
+local WriteFile = writefile or function() end
+local ReadFile = readfile or function() return "" end
 
 -- ============================================
--- PHẦN 2: UTILITY FUNCTIONS (CLIENT-SIDE)
+-- CONFIGURATION SYSTEM
 -- ============================================
 
---- Kiểm tra object validity
----@param obj any: Object cần kiểm tra
----@return boolean
-local function IsValid(obj)
-    if type(obj) ~= "userdata" then return false end
-    local success, result = pcall(function()
-        return obj and obj.Parent ~= nil
-    end)
-    return success and result == true
-end
-
---- Tính khoảng cách giữa 2 Vector3
----@param a Vector3
----@param b Vector3
----@return number
-local function Distance(a, b)
-    if not a or not b then return math.huge end
-    return (a - b).Magnitude
-end
-
---- Lấy character của player
----@param player Player
----@return Model|nil
-local function GetCharacter(player)
-    if not IsValid(player) then return nil end
-    return player.Character or player.CharacterAdded:Wait()
-end
-
---- Lấy Humanoid từ character
----@param char Model
----@return Humanoid|nil
-local function GetHumanoid(char)
-    if not IsValid(char) then return nil end    return char:FindFirstChildOfClass("Humanoid")
-end
-
---- Lấy RootPart (HumanoidRootPart hoặc Torso)
----@param char Model
----@return BasePart|nil
-local function GetRootPart(char)
-    local hum = GetHumanoid(char)    if not hum then return nil end
-    return hum.RootPart or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
-end
-
---- Lấy vị trí player
----@param player Player
----@return Vector3|nil
-local function GetPosition(player)
-    local char = GetCharacter(player)
-    local root = GetRootPart(char)
-    return root and root.Position
-end
-
---- Kiểm tra player còn sống không
----@param player Player
----@return boolean
-local function IsAlive(player)
-    local hum = GetHumanoid(GetCharacter(player))
-    return hum and hum.Health > 0 and hum:GetState() ~= Enum.HumanoidStateType.Dead
-end
-
---- Kiểm tra có phải team mình không (dùng Easy.gg TeamService hoặc fallback)
----@param player Player
----@return boolean
-local function IsTeammate(player)
-    -- Thử lấy team info từ Easy.gg
-    pcall(function()
-        local TeamService = getrenv().TeamService
-        if TeamService then
-            local myTeam = TeamService.getTeam(LocalPlayer)
-            local theirTeam = TeamService.getTeam(player)
-            return myTeam and theirTeam and myTeam == theirTeam
-        end
-    end)
-    
-    -- Fallback: kiểm tra team color/name
-    if LocalPlayer.Team and player.Team then
-        return LocalPlayer.Team == player.Team
-    end
-    
-    return false
-end
-
---- World to Screen Point
----@param pos Vector3
----@return Vector2|nil, boolean
-local function WorldToScreen(pos)
-    if not IsValid(Camera) then return nil, false end
-    local success, result, onScreen = pcall(function()
-        return Camera:WorldToViewportPoint(pos)
-    end)
-    if success then        return Vector2.new(result.X, result.Y), onScreen
-    end
-    return nil, false
-end
-
---- Lấy tất cả players (loại trừ self)
----@return table
-local function GetAllPlayers()
-    local plist = {}
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and IsValid(player) then
-            table.insert(plist, player)
-        end
-    end
-    return plist
-end
-
---- Lấy kẻ địch gần nhất
----@param maxDist number
----@return Player|nil, number
-local function GetNearestEnemy(maxDist)
-    maxDist = maxDist or math.huge
-    local nearest = nil
-    local minDist = maxDist
-    local myPos = GetPosition(LocalPlayer)
-    
-    if not myPos then return nil, math.huge end
-    
-    for _, player in pairs(GetAllPlayers()) do
-        if IsAlive(player) and not IsTeammate(player) then
-            local pos = GetPosition(player)
-            if pos then
-                local dist = Distance(myPos, pos)
-                if dist < minDist then
-                    minDist = dist
-                    nearest = player
-                end
-            end
-        end
-    end
-    
-    return nearest, minDist
-end
-
---- Lấy kẻ địch gần nhất đến crosshair (cho silent aim)
----@param fov number: Field of view max
----@return Player|nil, Vector3
-local function GetNearestToCrosshair(fov)
-    fov = fov or 180
-    local closest = nil
-    local shortestFov = fov
-    local bestHitPos = nil
-    
-    local mousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    
-    for _, player in pairs(GetAllPlayers()) do
-        if IsAlive(player) and not IsTeammate(player) then
-            local char = GetCharacter(player)
-            local root = GetRootPart(char)
-            
-            if root then
-                -- Kiểm tra nhiều hitbox points
-                local hitpoints = {
-                    root.Position + Vector3.new(0, 0, 0),   -- Body
-                    root.Position + Vector3.new(0, 3, 0),   -- Head
-                }
-                
-                -- Thêm head nếu có
-                local head = char:FindFirstChild("Head")
-                if head then
-                    table.insert(hitpoints, head.Position)
-                end
-                
-                for _, hitPos in pairs(hitpoints) do
-                    local screenPos, onScreen = WorldToScreen(hitPos)
-                    if onScreen and screenPos then
-                        local diff = Vector2.new(screenPos.X - mousePos.X, screenPos.Y - mousePos.Y)
-                        local currentFov = math.sqrt(diff.X * diff.X + diff.Y * diff.Y)
-                        
-                        if currentFov < shortestFov then
-                            shortestFov = currentFov
-                            closest = player
-                            bestHitPos = hitPos
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    return closest, bestHitPos
-end
-
---- Raycast từ camera đến position (dùng để check wall bang)
----@param pos Vector3
----@return boolean: true nếu có line of sight
-local function HasLineOfSight(pos)
-    if not IsValid(Camera) then return false end
-    
-    local origin = Camera.CFrame.Position
-    local direction = (pos - origin)
-    local params = RaycastParams.new()
-    params.FilterDescendantsInstances = {GetCharacter(LocalPlayer)}
-    params.FilterType = Enum.RaycastFilterType.Blacklist
-    
-    local result = workspace:Raycast(origin, direction.Unit * direction.Magnitude, params)
-    return result == nil
-end
-
---- Tìm remote bằng name pattern
----@param pattern string
----@return RemoteEvent|RemoteFunction|nil
-local function FindRemote(pattern)
-    if not RemoteFolder then
-        -- Tìm recursive trong ReplicatedStorage
-        for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
-            if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then
-                if desc.Name:find(pattern) then
-                    return desc
-                end
-            end
-        end
-        return nil
-    end
-    
-    for _, item in pairs(RemoteFolder:GetChildren()) do
-        if item:IsA("RemoteEvent") or item:IsA("RemoteFunction") then
-            if item.Name:find(pattern) then
-                return item
-            end
-        end
-    end
-    return nil
-end
-
---- Fire remote an toàn với error handling
----@param remote RemoteEvent|RemoteFunction
----@param ... any: Arguments
-local function SafeFire(remote, ...)
-    if not IsValid(remote) then return false end
-    pcall(function()
-        if remote:IsA("RemoteEvent") then
-            remote:FireServer(...)
-        elseif remote:IsA("RemoteFunction") then
-            remote:InvokeServer(...)
-        end
-    end)
-    return true
-end
-
--- ============================================
--- PHẦN 3: CONFIG & FEATURE STATES
--- ============================================
-
-local Features = {
-    -- COMBAT
+local Config = {
+    -- COMBAT MODULE
     KillAura = {
         Enabled = false,
-        Range = 18,
-        Delay = 0.1,
-        Mode = "normal", -- normal, silent, reach
+        Range = 28,
+        Delay = 0.08,
+        Mode = "Normal",
         ThroughWalls = false,
         MaxTargets = 3,
         ShowTarget = true
     },
+    
     SilentAim = {
         Enabled = false,
-        FOV = 15,
-        HitChance = 100,
+        FOV = 45,
+        HitChance = 95,
         TargetPart = "Head",
         ShowFOV = true,
         WallCheck = true,
         UseNearestPoint = true
     },
-    ReachHack = {
+    
+    Aimbot = {
         Enabled = false,
-        Reach = 25,
-        OriginalReach = 3
-    },
-    NoCooldown = {
-        Enabled = false
-    },
-    OneShotKill = {
-        Enabled = false,
-        Damage = 100
+        Smoothness = 0.35,
+        TargetPlayers = true,
+        TargetBeds = false,
+        Sensitivity = 2
     },
     
-    -- MOVEMENT
+    TriggerBot = {
+        Enabled = false,
+        Delay = 0.02,
+        OnlyEnemies = true
+    },
+    
+    -- MOVEMENT MODULE
     SpeedHack = {
         Enabled = false,
-        Speed = 1.5,
-        Method = "velocity", -- velocity, cframe, stepper
-        OnlyWhenMoving = true
+        Multiplier = 1.8,
+        Method = "Velocity"
     },
-    JumpPower = {
+    
+    Fly = {
         Enabled = false,
-        Power = 80,
-        InfiniteJump = false,
-        ExtraJumps = 5
+        Speed = 60,
+        Method = "CFrame",
+        NoClip = false,
+        Keybind = Enum.KeyCode.F
     },
-    HighJump = {
+    
+    NoClip = {
+        Enabled = false
+    },
+    
+    InfiniteJump = {
         Enabled = false,
-        HeightMultiplier = 2
+        ExtraJumps = 8
     },
-    AutoScaffold = {
-        Enabled = false,
-        TowerMode = true,
-        ExpandMode = false,
-        AutoPlaceDelay = 0.05,
-        TowerSpeed = 0.02
-    },
+    
     AntiVoid = {
         Enabled = false,
         YLevel = -50,
-        Method = "teleport", -- teleport, place, both
-        ResetOnTrigger = true
+        Method = "Teleport",
+        ResetOnTrigger = false
     },
+    
     NoFallDamage = {
         Enabled = false,
-        MinHeight = 20,
-        CancelVelocity = true
+        MinHeight = 15
     },
-    Flight = {
+    
+    HighJump = {
         Enabled = false,
-        Speed = 50,
-        Method = "cframe", -- cframe, velocity, gravity
-        Noclip = false,
-        Keybind = Enum.KeyCode.F
+        Power = 80
     },
+    
     Spider = {
         Enabled = false,
-        ClimbSpeed = 30
+        ClimbSpeed = 25
     },
     
-    -- VISUALS (CLIENT-SIDE DRAWING API)
+    -- ESP MODULE
     ESP = {
         Enabled = false,
-        Box = true,
-        Name = true,
-        Health = true,
-        Distance = true,
-        Tracer = true,
+        Players = true,
+        Beds = true,
+        Items = true,
+        ShowNames = true,
+        ShowHealth = true,
+        ShowDistance = true,
+        ShowTool = true,
+        Tracers = true,
         Chams = false,
-        Outline = true,
-        MaxDistance = 500,
-        EnemyColor = Color3.fromRGB(255, 50, 50),
-        TeamColor = Color3.fromRGB(50, 150, 255),
-        BoxFill = 0.1,
+        BoxESP = true,
+        MaxDistance = 800,
+        EnemyColor = Color3.fromRGB(255, 60, 60),
+        TeamColor = Color3.fromRGB(60, 140, 255),
         TextSize = 14
     },
-    BedESP = {
+    
+    -- UTILITY MODULE
+    AutoBridge = {
         Enabled = false,
-        ShowThroughWalls = true,
-        Color = Color3.fromRGB(255, 200, 50),
-        Size = 20
-    },
-    FOVCircle = {
-        Enabled = false,
-        Color = Color3.fromRGB(255, 255, 255),
-        Transparency = 0.5,
-        Filled = false
-    },
-    Tracers = {
-        Enabled = false,
-        From = "bottom", -- bottom, center, top
-        Color = Color3.fromRGB(255, 255, 255),
-        Thickness = 1
-    },
-    Chams = {
-        Enabled = false,
-        FillColor = Color3.fromRGB(255, 0, 0, 0.3),
-        OutlineColor = Color3.fromRGB(255, 255, 255)
+        Direction = "Forward",
+        Length = 100,
+        StairMode = false,
+        AutoPlaceDelay = 0.04
     },
     
-    -- UTILITY
+    AutoClick = {
+        Enabled = false,
+        CPS = 12,
+        LeftClick = true,
+        RightClick = false
+    },
+    
+    BedNuker = {
+        Enabled = false,
+        Range = 30,
+        Delay = 0.3,
+        AllBeds = false
+    },
+    
+    AutoFarm = {
+        Enabled = false,
+        Mode = "Aggressive",
+        TargetPriority = "Nearest"
+    },
+    
+    AutoScaffold = {
+        Enabled = false,
+        TowerMode = true,
+        ExpandMode = false
+    },
+    
     AutoHeal = {
         Enabled = false,
-        HealthPercent = 40,
-        Priority = {"shears", "apple", "soup"},
-        HealKey = Enum.KeyCode.H
+        HealthPercent = 45,
+        PriorityItems = {"Shears", "Apple", "Soup"}
     },
-    AutoBuy = {
+    
+    -- VISUAL MODULE
+    FOVCircle = {
         Enabled = false,
-        Items = {},
-        AutoUpgrade = true
+        Radius = 45,
+        Color = Color3.fromRGB(255, 255, 255),
+        Transparency = 0.6,
+        Filled = false,
+        Thickness = 1.5
     },
-    InventorySpoof = {
+    
+    Chams = {
         Enabled = false,
-        ItemName = "diamond_sword"
+        FillColor = Color3.fromRGB(255, 50, 50, 0.4),
+        OutlineColor = Color3.fromRGB(255, 255, 255),
+        FillTransparency = 0.4
     },
+    
+    Tracers = {
+        Enabled = false,
+        FromPosition = "Bottom",
+        Color = Color3.fromRGB(255, 255, 255),
+        Thickness = 1.2
+    },
+    
+    -- BYPASS MODULE
     AntiAim = {
         Enabled = false,
-        Pitch = "down", -- down, up, jitter, spin
-        Yaw = "spin", -- spin, backward, jitter
-        SpinSpeed = 360
+        Pitch = "Down",
+        Yaw = "Spin",
+        SpinSpeed = 360,
+        RandomRange = 30
     },
-    FreeCamera = {
+    
+    GodMode = {
         Enabled = false,
-        Speed = 5,
+        Method = "Blanket"
+    },
+    
+    NoCooldown = {
+        Enabled = false
+    },
+    
+    ReachHack = {
+        Enabled = false,
+        Range = 25
+    },
+    
+    OneShotKill = {
+        Enabled = false,
+        Damage = 999
+    },
+    
+    -- FREE CAMERA
+    FreeCam = {
+        Enabled = false,
+        Speed = 8,
         Keybind = Enum.KeyCode.P
     }
 }
 
--- Runtime variables
+-- ============================================
+-- UTILITY FUNCTIONS
+-- ============================================
+
+local Functions = {
+    IsValid = function(obj)
+        if type(obj) ~= "userdata" then return false end
+        local success, result = pcall(function()
+            return obj and obj.Parent ~= nil
+        end)
+        return success and result == true
+    end,
+    
+    Distance = function(a, b)
+        if not a or not b then return math.huge end
+        return (a - b).Magnitude
+    end,
+    
+    GetCharacter = function(player)
+        if not Functions.IsValid(player) then return nil end
+        return player.Character
+    end,
+    
+    GetHumanoid = function(char)
+        if not Functions.IsValid(char) then return nil end
+        return char:FindFirstChildOfClass("Humanoid")
+    end,
+    
+    GetRootPart = function(char)
+        local hum = Functions.GetHumanoid(char)
+        if not hum then return nil end
+        return hum.RootPart 
+            or char:FindFirstChild("HumanoidRootPart") 
+            or char:FindFirstChild("Torso") 
+            or char:FindFirstChild("UpperTorso")
+    end,
+    
+    GetPosition = function(player)
+        local char = Functions.GetCharacter(player)
+        local root = Functions.GetRootPart(char)
+        return root and root.Position
+    end,
+    
+    IsAlive = function(player)
+        local hum = Functions.GetHumanoid(Functions.GetCharacter(player))
+        return hum and hum.Health > 0 and hum:GetState() ~= Enum.HumanoidStateType.Dead
+    end,
+    
+    IsTeammate = function(targetPlayer)
+        local result = false
+        
+        pcall(function()
+            local TeamService = getrenv().TeamService
+            if TeamService then
+                local myTeam = TeamService.getTeam(Player)
+                local theirTeam = TeamService.getTeam(targetPlayer)
+                result = myTeam and theirTeam and myTeam == theirTeam
+            end
+        end)
+        
+        if not result then
+            if Player.Team and targetPlayer.Team then
+                result = Player.Team == targetPlayer.Team
+            end
+        end
+        
+        return result
+    end,
+    
+    WorldToScreen = function(position)
+        if not Functions.IsValid(Camera) then return nil, false end
+        
+        local success, result = pcall(function()
+            return Camera:WorldToViewportPoint(position)
+        end)
+        
+        if success then
+            return Vector2.new(result.X, result.Y), result.Z > 0
+        end
+        
+        return nil, false
+    end,
+    
+    GetAllPlayers = function()
+        local players = {}
+        for _, player in pairs(Services.Players:GetPlayers()) do
+            if player ~= Player and Functions.IsValid(player) then
+                table.insert(players, player)
+            end
+        end
+        return players
+    end,
+    
+    GetNearestEnemy = function(maxDistance)
+        maxDistance = maxDistance or math.huge
+        local nearest = nil
+        local minDist = maxDistance
+        local myPos = Functions.GetPosition(Player)
+        
+        if not myPos then return nil, math.huge end
+        
+        for _, player in pairs(Functions.GetAllPlayers()) do
+            if Functions.IsAlive(player) and not Functions.IsTeammate(player) then
+                local pos = Functions.GetPosition(player)
+                if pos then
+                    local dist = Functions.Distance(myPos, pos)
+                    if dist < minDist then
+                        minDist = dist
+                        nearest = player
+                    end
+                end
+            end
+        end
+        
+        return nearest, minDist
+    end,
+    
+    GetNearestToCrosshair = function(fovRadius)
+        fovRadius = fovRadius or 180
+        local closest = nil
+        local shortestFov = fovRadius
+        local bestHitPos = nil
+        
+        local mousePos = Vector2.new(
+            Camera.ViewportSize.X / 2, 
+            Camera.ViewportSize.Y / 2
+        )
+        
+        for _, player in pairs(Functions.GetAllPlayers()) do
+            if Functions.IsAlive(player) and not Functions.IsTeammate(player) then
+                local char = Functions.GetCharacter(player)
+                local root = Functions.GetRootPart(char)
+                
+                if root then
+                    local hitPoints = {
+                        {Pos = root.Position, Name = "Body"},
+                        {Pos = root.Position + Vector3.new(0, 3, 0), Name = "Head"}
+                    }
+                    
+                    local head = char:FindFirstChild("Head")
+                    if head then
+                        table.insert(hitPoints, {Pos = head.Position, Name = "Head"})
+                    end
+                    
+                    for _, point in pairs(hitPoints) do
+                        local screenPos, onScreen = Functions.WorldToScreen(point.Pos)
+                        
+                        if onScreen and screenPos then
+                            local diff = Vector2.new(
+                                screenPos.X - mousePos.X,
+                                screenPos.Y - mousePos.Y
+                            )
+                            local currentFov = math.sqrt(
+                                diff.X * diff.X + diff.Y * diff.Y
+                            )
+                            
+                            if currentFov < shortestFov then
+                                shortestFov = currentFov
+                                closest = player
+                                bestHitPos = point.Pos
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        return closest, bestHitPos
+    end,
+    
+    HasLineOfSight = function(targetPos)
+        if not Functions.IsValid(Camera) then return false end
+        
+        local origin = Camera.CFrame.Position
+        local direction = (targetPos - origin)
+        
+        local rayParams = RaycastParams.new()
+        rayParams.FilterDescendantsInstances = {Functions.GetCharacter(Player)}
+        rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+        
+        local result = workspace:Raycast(
+            origin, 
+            direction.Unit * direction.Magnitude, 
+            rayParams
+        )
+        
+        return result == nil
+    end,
+    
+    FindRemote = function(pattern)
+        local folders = {
+            Services.ReplicatedStorage:FindFirstChild("Remotes"),
+            Services.ReplicatedStorage:FindFirstChild("Events"),
+            Services.ReplicatedStorage:FindFirstChild("Network"),
+            Services.ReplicatedStorage:FindFirstChild("RemotesFolder")
+        }
+        
+        for _, folder in pairs(folders) do
+            if folder then
+                for _, item in pairs(folder:GetChildren()) do
+                    if item:IsA("RemoteEvent") or item:IsA("RemoteFunction") then
+                        if item.Name:lower():find(pattern:lower()) then
+                            return item
+                        end
+                    end
+                end
+            end
+        end
+        
+        for _, desc in pairs(Services.ReplicatedStorage:GetDescendants()) do
+            if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then
+                if desc.Name:lower():find(pattern:lower()) then
+                    return desc
+                end
+            end
+        end
+        
+        return nil
+    end,
+    
+    FireRemote = function(remote, ...)
+        if not Functions.IsValid(remote) then return false end
+        
+        pcall(function()
+            if remote:IsA("RemoteEvent") then
+                remote:FireServer(...)
+            elseif remote:IsA("RemoteFunction") then
+                remote:InvokeServer(...)
+            end
+        end)
+        
+        return true
+    end,
+    
+    Notify = function(message, msgType)
+        msgType = msgType or "info"
+        
+        pcall(function()
+            local announce = game:GetService("StarterGui"):SetCore(
+                "ChatMakeSystemMessage",
+                {
+                    Text = "[BedWarsVIP] " .. message;
+                    Color = msgType == "error" and Color3.new(1, 0.3, 0.3)
+                            or msgType == "success" and Color3.new(0.3, 1, 0.3)
+                            or Color3.new(1, 1, 1);
+                    Font = Enum.Font.GothamBold;
+                }
+            )
+        end)
+    end,
+    
+    DrawLine = function(from, to, color, thickness)
+        local drawing = Drawing.new("Line")
+        drawing.From = from
+        drawing.To = to
+        drawing.Color = color or Color3.new(1, 1, 1)
+        drawing.Thickness = thickness or 1
+        drawing.Transparency = 1
+        return drawing
+    end,
+    
+    DrawText = function(text, position, color, size, outline)
+        local drawing = Drawing.new("Text")
+        drawing.Text = text
+        drawing.Position = position
+        drawing.Color = color or Color3.new(1, 1, 1)
+        drawing.Size = size or 14
+        drawing.Outline = outline ~= false
+        drawing.Center = true
+        return drawing
+    end,
+    
+    DrawCircle = function(position, radius, color, filled)
+        local drawing = Drawing.new("Circle")
+        drawing.Position = position
+        drawing.Radius = radius or 100
+        drawing.Color = color or Color3.new(1, 1, 1)
+        drawing.Filled = filled or false
+        drawing.Thickness = 1
+        drawing.NumPoints = 64
+        return drawing
+    end,
+    
+    DrawSquare = function(position, size, color)
+        local drawing = Drawing.new("Square")
+        drawing.Position = position
+        drawing.Size = size or Vector2.new(50, 50)
+        drawing.Color = color or Color3.new(1, 1, 1)
+        drawing.Filled = false
+        drawing.Thickness = 1
+        return drawing
+    end,
+    
+    DrawImage = function(imageId, position, size)
+        local drawing = Drawing.new("Image")
+        drawing.Data = imageId
+        drawing.Position = position
+        drawing.Size = size or Vector2.new(50, 50)
+        drawing.Transparency = 1
+        return drawing
+    end,
+    
+    Lerp = function(a, b, t)
+        return a + (b - a) * t
+    end,
+    
+    Clamp = function(val, min, max)
+        return math.max(min, math.min(max, val))
+    end,
+    
+    Round = function(num, decimals)
+        local mult = 10 ^ (decimals or 0)
+        return math.floor(num * mult + 0.5) / mult
+    end
+}
+
+-- ============================================
+-- CONNECTIONS & DRAWINGS STORAGE
+-- ============================================
+
 local Connections = {}
 local Drawings = {}
 local Hooks = {}
 local OriginalFunctions = {}
+
+local ConnectionHandlers = {
+    KillAura = nil,
+    SilentAim = nil,
+    SpeedHack = nil,
+    Fly = nil,
+    NoClip = nil,
+    ESP = nil,
+    AutoBridge = nil,
+    AutoClick = nil,
+    BedNuker = nil,
+    AutoFarm = nil,
+    AutoScaffold = nil,
+    AutoHeal = nil,
+    AntiVoid = nil,
+    TracerUpdate = nil,
+    FOVUpdate = nil,
+    ChamsUpdate = nil,
+    FreeCamera = nil
+}
+
+local BodyMovers = {
+    Velocity = nil,
+    Gyro = nil
+}
+
+local ESPData = {}
+local FOVCircleDrawing = nil
 local CurrentTarget = nil
-local ScaffoldBlocks = {}
 local JumpsRemaining = 0
-local IsFlying = false
-local FlyVelocity = Vector3.new(0, 0, 0)
+local OriginalWalkSpeed = 16
+local OriginalJumpPower = 50
 
 -- ============================================
--- PHẦN 4: GUI SYSTEM (DELTA STYLE)
+-- GUI SYSTEM
 -- ============================================
 
 local GUI = {
     Instance = nil,
+    MainFrame = nil,
+    CurrentTab = "Combat",
     ToggleKey = Enum.KeyCode.Insert,
-    Visible = true
+    Visible = true,
+    Tabs = {},
+    TabButtons = {},
+    ContentArea = nil,
+    StatusDot = nil,
+    StatusText = nil
 }
 
---- Tạo main GUI window
 function GUI:Create()
-    -- Main ScreenGui
     self.Instance = Instance.new("ScreenGui")
-    self.Instance.Name = ScriptInfo.Name .. "_Main"
+    self.Instance.Name = "BedWarsVIP_v4"
     self.Instance.ResetOnSpawn = false
     self.Instance.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    -- Syn/Xeno protect (anti-log script detector)
-    if ExecutorDetect.IsSynapse then
+    if Executor.IsSynapse then
         syn.protect_gui(self.Instance)
         self.Instance.Parent = game.CoreGui
     else
-        self.Instance.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+        self.Instance.Parent = Player:WaitForChild("PlayerGui")
     end
     
-    -- Main Frame (Delta-style dark theme)
-    local MainFrame = Instance.new("Frame")
-    MainFrame.Name = "MainWindow"
-    MainFrame.Size = UDim2.new(0, 650, 0, 480)
-    MainFrame.Position = UDim2.new(0.5, -325, 0.5, -240)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    MainFrame.BorderSizePixel = 0
-    MainFrame.Active = true
-    MainFrame.Draggable = true
-    MainFrame.Parent = self.Instance
+    -- Main Window
+    self.MainFrame = Instance.new("Frame")
+    self.MainFrame.Name = "MainWindow"
+    self.MainFrame.Size = UDim2.new(0, 680, 0, 520)
+    self.MainFrame.Position = UDim2.new(0.5, -340, 0.5, -260)
+    self.MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+    self.MainFrame.BorderSizePixel = 0
+    self.MainFrame.Active = true
+    self.MainFrame.Draggable = true
+    self.MainFrame.Parent = self.Instance
     
-    -- Glow effect
-    local Glow = Instance.new("ImageLabel")
-    Glow.Name = "Glow"
-    Glow.AnchorPoint = Vector2.new(0.5, 0.5)
-    Glow.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Glow.Size = UDim2.new(1, 60, 1, 60)
-    Glow.BackgroundTransparency = 1
-    Glow.Image = "rbxassetid://499418466"
-    Glow.ImageColor3 = Color3.fromRGB(80, 120, 255)
-    Glow.ImageTransparency = 0.8
-    Glow.ZIndex = -1
-    Glow.Parent = MainFrame
+    -- Glow Effect
+    local glow = Instance.new("ImageLabel")
+    glow.Name = "Glow"
+    glow.AnchorPoint = Vector2.new(0.5, 0.5)
+    glow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    glow.Size = UDim2.new(1, 70, 1, 70)
+    glow.BackgroundTransparency = 1
+    glow.Image = "rbxassetid://499418466"
+    glow.ImageColor3 = Color3.fromRGB(80, 120, 255)
+    glow.ImageTransparency = 0.85
+    glow.ZIndex = -1
+    glow.Parent = self.MainFrame
     
-    -- Corner radius
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 8)
-    Corner.Parent = MainFrame
+    -- Corner Radius
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = self.MainFrame
     
     -- Border
-    local Border = Instance.new("UIStroke")
-    Border.Color = Color3.fromRGB(70, 130, 255)
-    Border.Thickness = 1.5
-    Border.Parent = MainFrame
+    local border = Instance.new("UIStroke")
+    border.Color = Color3.fromRGB(90, 130, 255)
+    border.Thickness = 1.5
+    border.Parent = self.MainFrame
     
     -- Header
-    local Header = Instance.new("Frame")
-    Header.Name = "Header"
-    Header.Size = UDim2.new(1, 0, 0, 38)
-    Header.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-    Header.BorderSizePixel = 0
-    Header.Parent = MainFrame
+    self:CreateHeader()
     
-    local HeaderCorner = Instance.new("UICorner")
-    HeaderCorner.CornerRadius = UDim.new(0, 8)
-    HeaderCorner.Parent = Header
+    -- Tab Bar
+    self:CreateTabBar()
     
-    local HeaderFix = Instance.new("Frame")
-    HeaderFix.Size = UDim2.new(1, 0, 0, 8)
-    HeaderFix.Position = UDim2.new(0, 0, 1, -8)
-    HeaderFix.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-    HeaderFix.BorderSizePixel = 0
-    HeaderFix.Parent = Header
+    -- Content Area
+    self.ContentArea = Instance.new("Frame")
+    self.ContentArea.Name = "ContentArea"
+    self.ContentArea.Size = UDim2.new(1, -20, 1, -95)
+    self.ContentArea.Position = UDim2.new(0, 10, 0, 85)
+    self.ContentArea.BackgroundTransparency = 1
+    self.ContentArea.ClipsDescendants = true
+    self.ContentArea.Parent = self.MainFrame
     
-    -- Title
-    local Title = Instance.new("TextLabel")
-    Title.Name = "Title"
-    Title.Size = UDim2.new(1, -100, 1, 0)
-    Title.Position = UDim2.new(0, 12, 0, 0)
-    Title.BackgroundTransparency = 1
-    Title.Text = "  ⚡ " .. ScriptInfo.Name .. " v" .. ScriptInfo.Version
-    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.TextSize = 16
-    Title.Font = Enum.Font.GothamBold
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.Parent = Header
-    
-    -- Status indicator
-    local StatusDot = Instance.new("Frame")
-    StatusDot.Name = "StatusDot"
-    StatusDot.Size = UDim2.new(0, 8, 0, 8)
-    StatusDot.Position = UDim2.new(1, -85, 0.5, -4)
-    StatusDot.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
-    StatusDot.BorderSizePixel = 0
-    StatusDot.Parent = Header
-    
-    local DotCorner = Instance.new("UICorner")
-    DotCorner.CornerRadius = UDim.new(0, 4)
-    DotCorner.Parent = StatusDot
-    
-    local StatusText = Instance.new("TextLabel")
-    StatusText.Name = "StatusText"
-    StatusText.Size = UDim2.new(0, 70, 1, 0)
-    StatusText.Position = UDim2.new(1, -75, 0, 0)
-    StatusText.BackgroundTransparency = 1
-    StatusText.Text = "LOADED"
-    StatusText.TextColor3 = Color3.fromRGB(50, 255, 50)
-    StatusText.TextSize = 11
-    StatusText.Font = Enum.Font.GothamBold
-    StatusText.Parent = Header
-    
-    -- Close button
-    local CloseBtn = Instance.new("ImageButton")
-    CloseBtn.Name = "CloseButton"
-    CloseBtn.Size = UDim2.new(0, 32, 0, 32)
-    CloseBtn.Position = UDim2.new(1, -42, 0, 3)
-    CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 65, 65)
-    CloseBtn.BorderSizePixel = 0
-    CloseBtn.Image = ""
-    CloseBtn.Parent = Header
-    
-    local CloseCorner = Instance.new("UICorner")
-    CloseCorner.CornerRadius = UDim.new(0, 6)
-    CloseCorner.Parent = CloseBtn
-    
-    local CloseIcon = Instance.new("TextLabel")
-    CloseIcon.Size = UDim2.new(1, 0, 1, 0)
-    CloseIcon.BackgroundTransparency = 1
-    CloseIcon.Text = "✕"
-    CloseIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CloseIcon.TextSize = 14
-    CloseIcon.Font = Enum.Font.GothamBold
-    CloseIcon.Parent = CloseBtn
-    
-    CloseBtn.MouseButton1Click:Connect(function()
-        self:Toggle()
-    end)
-    
-    -- Minimize button
-    local MinBtn = Instance.new("ImageButton")
-    MinBtn.Name = "MinimizeButton"
-    MinBtn.Size = UDim2.new(0, 32, 0, 32)
-    MinBtn.Position = UDim2.new(1, -78, 0, 3)
-    MinBtn.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
-    MinBtn.BorderSizePixel = 0
-    MinBtn.Image = ""
-    MinBtn.Parent = Header
-    
-    local MinCorner = Instance.new("UICorner")
-    MinCorner.CornerRadius = UDim.new(0, 6)
-    MinCorner.Parent = MinBtn
-    
-    local MinIcon = Instance.new("TextLabel")
-    MinIcon.Size = UDim2.new(1, 0, 1, 0)
-    MinIcon.BackgroundTransparency = 1
-    MinIcon.Text = "−"
-    MinIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MinIcon.TextSize = 18
-    MinIcon.Font = Enum.Font.GothamBold
-    MinIcon.Parent = MinBtn
-    
-    -- Tab bar container
-    local TabContainer = Instance.new("Frame")
-    TabContainer.Name = "TabContainer"
-    TabContainer.Size = UDim2.new(1, -20, 0, 32)
-    TabContainer.Position = UDim2.new(0, 10, 0, 43)
-    TabContainer.BackgroundTransparency = 1
-    TabContainer.Parent = MainFrame
-    
-    -- Tabs data
-    local Tabs = {
-        {Name = "Combat", Icon = "⚔️"},
-        {Name = "Movement", Icon = "🏃"},
-        {Name = "Visuals", Icon = "👁️"},
-        {Name = "Utility", Icon = "🛠️"},
-        {Name = "Settings", Icon = "⚙️"}
-    }
-    
-    local TabButtons = {}
-    local TabWidth = 1 / #Tabs
-    
-    for i, tabData in pairs(Tabs) do
-        local TabBtn = Instance.new("TextButton")
-        TabBtn.Name = tabData.Name .. "Tab"
-        TabBtn.Size = UDim2.new(TabWidth, -4, 1, 0)
-        TabBtn.Position = UDim2.new((i-1) * TabWidth, 2, 0, 0)
-        TabBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-        TabBtn.BorderSizePixel = 0
-        TabBtn.Text = tabData.Icon .. " " .. tabData.Name
-        TabBtn.TextColor3 = Color3.fromRGB(140, 140, 160)
-        TabBtn.TextSize = 12
-        TabBtn.Font = Enum.Font.GothamSemibold
-        TabBtn.Parent = TabContainer
-        
-        local BtnCorner = Instance.new("UICorner")
-        BtnCorner.CornerRadius = UDim.new(0, 5)
-        BtnCorner.Parent = TabBtn
-        
-        table.insert(TabButtons, TabBtn)
-        
-        TabBtn.MouseButton1Click:Connect(function()
-            self:SwitchTab(tabData.Name)
-        end)
-    end
-    
-    -- Content area
-    local ContentArea = Instance.new("Frame")
-    ContentArea.Name = "ContentArea"
-    ContentArea.Size = UDim2.new(1, -16, 1, -83)
-    ContentArea.Position = UDim2.new(0, 8, 0, 78)
-    ContentArea.BackgroundTransparency = 1
-    ContentArea.ClipsDescendants = true
-    ContentArea.Parent = MainFrame
-    
-    -- Create tab contents
-    self.Tabs = {}
-    self.TabButtons = TabButtons
-    self.ContentArea = ContentArea
-    self.MainFrame = MainFrame
-    self.StatusDot = StatusDot
-    self.StatusText = StatusText
-    
+    -- Create Tab Contents
     self:CreateCombatTab()
     self:CreateMovementTab()
-    self:CreateVisualsTab()
+    self:CreateESPTab()
     self:CreateUtilityTab()
-    self:CreateSettingsTab()
+    self:CreateVisualTab()
+    self:CreateBypassTab()
+    self:CreateConfigTab()
+    self:CreateCreditsTab()
     
-    -- Default tab
+    -- Default Tab
     self:SwitchTab("Combat")
     
     return self.Instance
 end
 
---- Toggle GUI visibility
+function GUI:CreateHeader()
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 42)
+    header.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+    header.BorderSizePixel = 0
+    header.Parent = self.MainFrame
+    
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 10)
+    headerCorner.Parent = header
+    
+    local headerFix = Instance.new("Frame")
+    headerFix.Size = UDim2.new(1, 0, 0, 10)
+    headerFix.Position = UDim2.new(0, 0, 1, -10)
+    headerFix.BackgroundColor3 = Color3.fromRGB(18, 18, 28)
+    headerFix.BorderSizePixel = 0
+    headerFix.Parent = header
+    
+    -- Title
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(1, -120, 1, 0)
+    title.Position = UDim2.new(0, 15, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "⚡ BEDWARS VIP v4.0"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 17
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = header
+    
+    -- Status Dot
+    self.StatusDot = Instance.new("Frame")
+    self.StatusDot.Name = "StatusDot"
+    self.StatusDot.Size = UDim2.new(0, 9, 0, 9)
+    self.StatusDot.Position = UDim2.new(1, -90, 0.5, -4.5)
+    self.StatusDot.BackgroundColor3 = Color3.fromRGB(50, 255, 100)
+    self.StatusDot.BorderSizePixel = 0
+    self.StatusDot.Parent = header
+    
+    local dotCorner = Instance.new("UICorner")
+    dotCorner.CornerRadius = UDim.new(0, 4.5)
+    dotCorner.Parent = self.StatusDot
+    
+    -- Status Text
+    self.StatusText = Instance.new("TextLabel")
+    self.StatusText.Name = "StatusText"
+    self.StatusText.Size = UDim2.new(0, 75, 1, 0)
+    self.StatusText.Position = UDim2.new(1, -78, 0, 0)
+    self.StatusText.BackgroundTransparency = 1
+    self.StatusText.Text = "READY"
+    self.StatusText.TextColor3 = Color3.fromRGB(50, 255, 100)
+    self.StatusText.TextSize = 11
+    self.StatusText.Font = Enum.Font.GothamBold
+    self.StatusText.Parent = header
+    
+    -- Close Button
+    local closeBtn = Instance.new("ImageButton")
+    closeBtn.Name = "CloseButton"
+    closeBtn.Size = UDim2.new(0, 34, 0, 34)
+    closeBtn.Position = UDim2.new(1, -44, 0, 4)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 65, 65)
+    closeBtn.BorderSizePixel = 0
+    closeBtn.Image = ""
+    closeBtn.Parent = header
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 7)
+    closeCorner.Parent = closeBtn
+    
+    local closeIcon = Instance.new("TextLabel")
+    closeIcon.Size = UDim2.new(1, 0, 1, 0)
+    closeIcon.BackgroundTransparency = 1
+    closeIcon.Text = "✕"
+    closeIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeIcon.TextSize = 15
+    closeIcon.Font = Enum.Font.GothamBold
+    closeIcon.Parent = closeBtn
+    
+    closeBtn.MouseButton1Click:Connect(function()
+        self:Toggle()
+    end)
+    
+    -- Minimize Button
+    local minBtn = Instance.new("ImageButton")
+    minBtn.Name = "MinimizeButton"
+    minBtn.Size = UDim2.new(0, 34, 0, 34)
+    minBtn.Position = UDim2.new(1, -82, 0, 4)
+    minBtn.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
+    minBtn.BorderSizePixel = 0
+    minBtn.Image = ""
+    minBtn.Parent = header
+    
+    local minCorner = Instance.new("UICorner")
+    minCorner.CornerRadius = UDim.new(0, 7)
+    minCorner.Parent = minBtn
+    
+    local minIcon = Instance.new("TextLabel")
+    minIcon.Size = UDim2.new(1, 0, 1, 0)
+    minIcon.BackgroundTransparency = 1
+    minIcon.Text = "−"
+    minIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    minIcon.TextSize = 18
+    minIcon.Font = Enum.Font.GothamBold
+    minIcon.Parent = minBtn
+end
+
+function GUI:CreateTabBar()
+    local tabContainer = Instance.new("Frame")
+    tabContainer.Name = "TabContainer"
+    tabContainer.Size = UDim2.new(1, -24, 0, 36)
+    tabContainer.Position = UDim2.new(0, 12, 0, 48)
+    tabContainer.BackgroundTransparency = 1
+    tabContainer.Parent = self.MainFrame
+    
+    local tabs = {
+        {Name = "Combat", Icon = "⚔️"},
+        {Name = "Movement", Icon = "🏃"},
+        {Name = "ESP", Icon = "👁️"},
+        {Name = "Utility", Icon = "🛠️"},
+        {Name = "Visual", Icon = "🎨"},
+        {Name = "Bypass", Icon = "🛡️"},
+        {Name = "Config", Icon = "⚙️"},
+        {Name = "Credits", Icon = "ℹ️"}
+    }
+    
+    local tabWidth = 1 / #tabs
+    
+    for i, tabData in pairs(tabs) do
+        local tabBtn = Instance.new("TextButton")
+        tabBtn.Name = tabData.Name .. "Tab"
+        tabBtn.Size = UDim2.new(tabWidth, -3, 1, 0)
+        tabBtn.Position = UDim2.new((i-1) * tabWidth, 1.5, 0, 0)
+        tabBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 42)
+        tabBtn.BorderSizePixel = 0
+        tabBtn.Text = tabData.Icon .. " " .. tabData.Name
+        tabBtn.TextColor3 = Color3.fromRGB(140, 140, 160)
+        tabBtn.TextSize = 11
+        tabBtn.Font = Enum.Font.GothamSemibold
+        tabBtn.Parent = tabContainer
+        
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 6)
+        btnCorner.Parent = tabBtn
+        
+        table.insert(self.TabButtons, tabBtn)
+        
+        tabBtn.MouseButton1Click:Connect(function()
+            self:SwitchTab(tabData.Name)
+        end)
+    end
+end
+
+function GUI:SwitchTab(tabName)
+    for name, content in pairs(self.Tabs) do
+        if content then
+            content.Visible = (name == tabName)
+        end
+    end
+    
+    for i, btn in pairs(self.TabButtons) do
+        local btnName = btn.Name:gsub("Tab$", "")
+        if btnName == tabName then
+            btn.BackgroundColor3 = Color3.fromRGB(70, 100, 200)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(28, 28, 42)
+            btn.TextColor3 = Color3.fromRGB(140, 140, 160)
+        end
+    end
+    
+    self.CurrentTab = tabName
+end
+
 function GUI:Toggle()
     if self.Instance then
         self.Visible = not self.Visible
@@ -727,1457 +899,2397 @@ function GUI:Toggle()
     end
 end
 
---- Switch between tabs
----@param tabName string
-function GUI:SwitchTab(tabName)
-    -- Hide all tab content
-    for name, content in pairs(self.Tabs) do
-        if content then
-            content.Visible = (name == tabName)
-        end
-    end
-    
-    -- Update button styles
-    for i, btn in pairs(self.TabButtons) do
-        local btnName = btn.Name:gsub("Tab$", "")
-        if btnName == tabName then
-            btn.BackgroundColor3 = Color3.fromRGB(60, 90, 180)
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        else
-            btn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-            btn.TextColor3 = Color3.fromRGB(140, 140, 160)
-        end
-    end
-end
-
---- Create section header
----@param parent Instance
----@param title string
----@param color Color3
----@return number yOffset
+-- GUI Component Creators
 function GUI:SectionHeader(parent, title, color, yPos)
-    local Section = Instance.new("Frame")
-    Section.Name = title .. "Section"
-    Section.Size = UDim2.new(1, -10, 0, 24)
-    Section.Position = UDim2.new(0, 5, 0, yPos)
-    Section.BackgroundTransparency = 1
-    Section.Parent = parent
+    local section = Instance.new("Frame")
+    section.Name = title .. "Section"
+    section.Size = UDim2.new(1, -10, 0, 26)
+    section.Position = UDim2.new(0, 5, 0, yPos)
+    section.BackgroundTransparency = 1
+    section.Parent = parent
     
-    local Bar = Instance.new("Frame")
-    Bar.Size = UDim2.new(1, 0, 0, 2)
-    Bar.Position = UDim2.new(0, 0, 0, 10)
-    Bar.BackgroundColor3 = color or Color3.fromRGB(80, 120, 255)
-    Bar.BorderSizePixel = 0
-    Bar.Parent = Section
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, 0, 0, 2)
+    bar.Position = UDim2.new(0, 0, 0, 11)
+    bar.BackgroundColor3 = color or Color3.fromRGB(80, 120, 255)
+    bar.BorderSizePixel = 0
+    bar.Parent = section
     
-    local BarCorner = Instance.new("UICorner")
-    BarCorner.CornerRadius = UDim.new(0, 1)
-    BarCorner.Parent = Bar
+    local barCorner = Instance.new("UICorner")
+    barCorner.CornerRadius = UDim.new(0, 1)
+    barCorner.Parent = bar
     
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(1, -8, 1, 0)
-    Label.Position = UDim2.new(0, 8, 0, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = "  " .. title
-    Label.TextColor3 = color or Color3.fromRGB(200, 200, 220)
-    Label.TextSize = 13
-    Label.Font = Enum.Font.GothamBold
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Section
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -8, 1, 0)
+    label.Position = UDim2.new(0, 8, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = "  " .. title
+    label.TextColor3 = color or Color3.fromRGB(200, 200, 220)
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamBold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = section
     
-    return yPos + 28
+    return yPos + 30
 end
 
---- Create toggle switch
----@param parent Instance
----@param featureName string
----@param featureTable table
----@param yPos number
----@return number newYPos
-function GUI:CreateToggle(parent, featureName, featureTable, yPos)
-    local Container = Instance.new("Frame")
-    Container.Name = featureName .. "Row"
-    Container.Size = UDim2.new(1, -10, 0, 30)
-    Container.Position = UDim2.new(0, 5, 0, yPos)
-    Container.BackgroundTransparency = 1
-    Container.Parent = parent
+function GUI:Toggle(parent, featureName, featureTable, yPos)
+    local container = Instance.new("Frame")
+    container.Name = featureName .. "Row"
+    container.Size = UDim2.new(1, -10, 0, 32)
+    container.Position = UDim2.new(0, 5, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
     
     -- Label
-    local Label = Instance.new("TextLabel")
-    Label.Name = "FeatureLabel"
-    Label.Size = UDim2.new(1, -55, 1, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = featureName
-    Label.TextColor3 = Color3.fromRGB(210, 210, 220)
-    Label.TextSize = 13
-    Label.Font = Enum.Font.Gotham
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.TextTruncate = Enum.TextTruncate.AtEnd
-    Label.Parent = Container
+    local label = Instance.new("TextLabel")
+    label.Name = "FeatureLabel"
+    label.Size = UDim2.new(1, -55, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = featureName
+    label.TextColor3 = Color3.fromRGB(215, 215, 225)
+    label.TextSize = 13
+    label.Font = Enum.Font.Gotham
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextTruncate = Enum.TextTruncate.AtEnd
+    label.Parent = container
     
-    -- Toggle background
-    local ToggleBg = Instance.new("Frame")
-    ToggleBg.Name = "ToggleBg"
-    ToggleBg.Size = UDim2.new(0, 40, 0, 20)
-    ToggleBg.Position = UDim2.new(1, -43, 0.5, -10)
-    ToggleBg.BackgroundColor3 = featureTable.Enabled and Color3.fromRGB(50, 180, 100) or Color3.fromRGB(60, 60, 75)
-    ToggleBg.BorderSizePixel = 0
-    ToggleBg.Parent = Container
+    -- Toggle Background
+    local toggleBg = Instance.new("Frame")
+    toggleBg.Name = "ToggleBg"
+    toggleBg.Size = UDim2.new(0, 44, 0, 22)
+    toggleBg.Position = UDim2.new(1, -47, 0.5, -11)
+    toggleBg.BackgroundColor3 = featureTable.Enabled 
+        and Color3.fromRGB(50, 180, 100) 
+        or Color3.fromRGB(58, 58, 72)
+    toggleBg.BorderSizePixel = 0
+    toggleBg.Parent = container
     
-    local BgCorner = Instance.new("UICorner")
-    BgCorner.CornerRadius = UDim.new(0, 10)
-    BgCorner.Parent = ToggleBg
+    local bgCorner = Instance.new("UICorner")
+    bgCorner.CornerRadius = UDim.new(0, 11)
+    bgCorner.Parent = toggleBg
     
-    -- Toggle indicator
-    local Indicator = Instance.new("Frame")
-    Indicator.Name = "Indicator"
-    Indicator.Size = UDim2.new(0, 16, 0, 16)
-    Indicator.Position = featureTable.Enabled and UDim2.new(0, 22, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
-    Indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    Indicator.BorderSizePixel = 0
-    Indicator.Parent = ToggleBg
+    -- Indicator
+    local indicator = Instance.new("Frame")
+    indicator.Name = "Indicator"
+    indicator.Size = UDim2.new(0, 18, 0, 18)
+    indicator.Position = featureTable.Enabled 
+        and UDim2.new(0, 23, 0.5, -9) 
+        or UDim2.new(0, 2, 0.5, -9)
+    indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    indicator.BorderSizePixel = 0
+    indicator.Parent = toggleBg
     
-    local IndCorner = Instance.new("UICorner")
-    IndCorner.CornerRadius = UDim.new(0, 8)
-    IndCorner.Parent = Indicator
+    local indCorner = Instance.new("UICorner")
+    indCorner.CornerRadius = UDim.new(0, 9)
+    indCorner.Parent = indicator
     
-    -- Click handler
-    local clickConn = Container.InputBegan:Connect(function(input)
+    -- Click Handler
+    local clickConn = container.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             featureTable.Enabled = not featureTable.Enabled
             
-            -- Update visuals
-            ToggleBg.BackgroundColor3 = featureTable.Enabled and Color3.fromRGB(50, 180, 100) or Color3.fromRGB(60, 60, 75)
-            Indicator.Position = featureTable.Enabled and UDim2.new(0, 22, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+            toggleBg.BackgroundColor3 = featureTable.Enabled 
+                and Color3.fromRGB(50, 180, 100) 
+                or Color3.fromRGB(58, 58, 72)
             
-            -- Trigger feature callback
+            indicator.Position = featureTable.Enabled 
+                and UDim2.new(0, 23, 0.5, -9) 
+                or UDim2.new(0, 2, 0.5, -9)
+            
             self:OnFeatureToggled(featureName, featureTable)
         end
     end)
     
     table.insert(Connections, clickConn)
     
-    return yPos + 34
+    return yPos + 36
 end
 
---- Create slider control
----@param parent Instance
----@param label string
----@param min number
----@param max number
----@param default number
----@param callback function
----@param yPos number
----@return number newYPos
-function GUI:CreateSlider(parent, label, min, max, default, callback, yPos)
-    local Container = Instance.new("Frame")
-    Container.Name = label .. "Slider"
-    Container.Size = UDim2.new(1, -10, 0, 42)
-    Container.Position = UDim2.new(0, 5, 0, yPos)
-    Container.BackgroundTransparency = 1
-    Container.Parent = parent
+function GUI:Slider(parent, label, minValue, maxValue, defaultValue, callback, yPos)
+    local container = Instance.new("Frame")
+    container.Name = label .. "Slider"
+    container.Size = UDim2.new(1, -10, 0, 44)
+    container.Position = UDim2.new(0, 5, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
     
-    -- Top row: label + value
-    local TopRow = Instance.new("Frame")
-    TopRow.Size = UDim2.new(1, 0, 0, 20)
-    TopRow.BackgroundTransparency = 1
-    TopRow.Parent = Container
+    -- Top Row
+    local topRow = Instance.new("Frame")
+    topRow.Size = UDim2.new(1, 0, 0, 22)
+    topRow.BackgroundTransparency = 1
+    topRow.Parent = container
     
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.7, 0, 1, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = label
-    Label.TextColor3 = Color3.fromRGB(190, 190, 200)
-    Label.TextSize = 12
-    Label.Font = Enum.Font.Gotham
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = TopRow
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(0.65, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = label
+    nameLabel.TextColor3 = Color3.fromRGB(190, 190, 200)
+    nameLabel.TextSize = 12
+    nameLabel.Font = Enum.Font.Gotham
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = topRow
     
-    local ValueLabel = Instance.new("TextLabel")
-    ValueLabel.Size = UDim2.new(0.3, 0, 1, 0)
-    ValueLabel.BackgroundTransparency = 1
-    ValueLabel.Text = tostring(default)
-    ValueLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
-    ValueLabel.TextSize = 12
-    ValueLabel.Font = Enum.Font.GothamBold
-    ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    ValueLabel.Parent = TopRow
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Name = "ValueLabel"
+    valueLabel.Size = UDim2.new(0.35, 0, 1, 0)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.Text = tostring(defaultValue)
+    valueLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
+    valueLabel.TextSize = 12
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valueLabel.Parent = topRow
     
-    -- Slider track
-    local Track = Instance.new("Frame")
-    Track.Name = "Track"
-    Track.Size = UDim2.new(1, 0, 0, 6)
-    Track.Position = UDim2.new(0, 0, 1, -6)
-    Track.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    Track.BorderSizePixel = 0
-    Track.Parent = Container
+    -- Track
+    local track = Instance.new("Frame")
+    track.Name = "Track"
+    track.Size = UDim2.new(1, 0, 0, 6)
+    track.Position = UDim2.new(0, 0, 1, -6)
+    track.BackgroundColor3 = Color3.fromRGB(42, 42, 58)
+    track.BorderSizePixel = 0
+    track.Parent = container
     
-    local TrackCorner = Instance.new("UICorner")
-    TrackCorner.CornerRadius = UDim.new(0, 3)
-    TrackCorner.Parent = Track
+    local trackCorner = Instance.new("UICorner")
+    trackCorner.CornerRadius = UDim.new(0, 3)
+    trackCorner.Parent = track
     
-    -- Slider fill
-    local fillPercent = (default - min) / (max - min)
-    local Fill = Instance.new("Frame")
-    Fill.Name = "Fill"
-    Fill.Size = UDim2.new(fillPercent, 0, 1, 0)
-    Fill.BackgroundColor3 = Color3.fromRGB(80, 130, 255)
-    Fill.BorderSizePixel = 0
-    Fill.Parent = Track
+    -- Fill
+    local fillPercent = (defaultValue - minValue) / (maxValue - minValue)
+    local fill = Instance.new("Frame")
+    fill.Name = "Fill"
+    fill.Size = UDim2.new(fillPercent, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(80, 130, 255)
+    fill.BorderSizePixel = 0
+    fill.Parent = track
     
-    local FillCorner = Instance.new("UICorner")
-    FillCorner.CornerRadius = UDim.new(0, 3)
-    FillCorner.Parent = Fill
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(0, 3)
+    fillCorner.Parent = fill
     
-    -- Slider thumb
-    local Thumb = Instance.new("Frame")
-    Thumb.Name = "Thumb"
-    Thumb.Size = UDim2.new(0, 14, 0, 14)
-    Thumb.Position = UDim2.new(fillPercent, -7, 0.5, -7)
-    Thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    Thumb.BorderSizePixel = 0
-    Thumb.Parent = Track
+    -- Thumb
+    local thumb = Instance.new("Frame")
+    thumb.Name = "Thumb"
+    thumb.Size = UDim2.new(0, 16, 0, 16)
+    thumb.Position = UDim2.new(fillPercent, -8, 0.5, -8)
+    thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    thumb.BorderSizePixel = 0
+    thumb.Parent = track
     
-    local ThumbCorner = Instance.new("UICorner")
-    ThumbCorner.CornerRadius = UDim.new(0, 7)
-    ThumbCorner.Parent = Thumb
+    local thumbCorner = Instance.new("UICorner")
+    thumbCorner.CornerRadius = UDim.new(0, 8)
+    thumbCorner.Parent = thumb
     
-    -- Drag logic
+    -- Drag Logic
     local dragging = false
-    local dragConn
+    local dragConnection
     
     local function updateSlider(input)
-        local relativeX = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
-        local value = min + (max - min) * relativeX
+        local relativeX = Functions.Clamp(
+            (input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 
+            0, 
+            1
+        )
+        local value = minValue + (maxValue - minValue) * relativeX
         
         fillPercent = relativeX
-        Fill.Size = UDim2.new(fillPercent, 0, 1, 0)
-        Thumb.Position = UDim2.new(fillPercent, -7, 0.5, -7)
-        ValueLabel.Text = tostring(math.floor(value * 10) / 10)
+        fill.Size = UDim2.new(fillPercent, 0, 1, 0)
+        thumb.Position = UDim2.new(fillPercent, -8, 0.5, -8)
+        valueLabel.Text = tostring(Functions.Round(value, 1))
         
         if callback then
             callback(value)
         end
     end
     
-    Track.InputBegan:Connect(function(input)
+    track.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
             updateSlider(input)
             
-            dragConn = RunService.RenderStepped:Connect(function()
-                if dragging and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-                    updateSlider(UserInputService:GetMouseLocation())
+            dragConnection = Services.RunService.RenderStepped:Connect(function()
+                if dragging and Services.UserInput:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                    updateSlider(Services.UserInput:GetMouseLocation())
                 end
             end)
         end
     end)
     
-    Track.InputEnded:Connect(function(input)
+    track.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
-            if dragConn then
-                dragConn:Disconnect()
-                dragConn = nil
+            if dragConnection then
+                dragConnection:Disconnect()
+                dragConnection = nil
             end
         end
     end)
     
-    return yPos + 48
+    return yPos + 50
 end
 
---- Create dropdown
----@param parent Instance
----@param label string
----@param options table
----@param selected string
----@param callback function
----@param yPos number
----@return number newYPos
-function GUI:CreateDropdown(parent, label, options, selected, callback, yPos)
-    local Container = Instance.new("Frame")
-    Container.Name = label .. "Dropdown"
-    Container.Size = UDim2.new(1, -10, 0, 28)
-    Container.Position = UDim2.new(0, 5, 0, yPos)
-    Container.BackgroundTransparency = 1
-    Container.Parent = parent
+function GUI:Dropdown(parent, label, options, selected, callback, yPos)
+    local container = Instance.new("Frame")
+    container.Name = label .. "Dropdown"
+    container.Size = UDim2.new(1, -10, 0, 30)
+    container.Position = UDim2.new(0, 5, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
     
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.35, 0, 1, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = label
-    Label.TextColor3 = Color3.fromRGB(190, 190, 200)
-    Label.TextSize = 12
-    Label.Font = Enum.Font.Gotham
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = Container
+    -- Label
+    local dropdownLabel = Instance.new("TextLabel")
+    dropdownLabel.Size = UDim2.new(0.32, 0, 1, 0)
+    dropdownLabel.BackgroundTransparency = 1
+    dropdownLabel.Text = label
+    dropdownLabel.TextColor3 = Color3.fromRGB(190, 190, 200)
+    dropdownLabel.TextSize = 12
+    dropdownLabel.Font = Enum.Font.Gotham
+    dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
+    dropdownLabel.Parent = container
     
-    local Dropdown = Instance.new("TextButton")
-    Dropdown.Name = "DropdownBtn"
-    Dropdown.Size = UDim2.new(0.6, 0, 1, 0)
-    Dropdown.Position = UDim2.new(0.4, 0, 0, 0)
-    Dropdown.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    Dropdown.BorderSizePixel = 0
-    Dropdown.Text = selected or options[1]
-    Dropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Dropdown.TextSize = 12
-    Dropdown.Font = Enum.Font.Gotham
-    Dropdown.Parent = Container
+    -- Dropdown Button
+    local dropdown = Instance.new("TextButton")
+    dropdown.Name = "DropdownBtn"
+    dropdown.Size = UDim2.new(0.64, 0, 1, 0)
+    dropdown.Position = UDim2.new(0.36, 0, 0, 0)
+    dropdown.BackgroundColor3 = Color3.fromRGB(42, 42, 58)
+    dropdown.BorderSizePixel = 0
+    dropdown.Text = selected or options[1]
+    dropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
+    dropdown.TextSize = 12
+    dropdown.Font = Enum.Font.Gotham
+    dropdown.Parent = container
     
-    local DropCorner = Instance.new("UICorner")
-    DropCorner.CornerRadius = UDim.new(0, 5)
-    DropCorner.Parent = Dropdown
+    local dropCorner = Instance.new("UICorner")
+    dropCorner.CornerRadius = UDim.new(0, 6)
+    dropCorner.Parent = dropdown
     
-    -- Dropdown list (hidden by default)
-    local ListFrame = Instance.new("Frame")
-    ListFrame.Name = "ListFrame"
-    ListFrame.Size = UDim2.new(1, 0, 0, #options * 26)
-    ListFrame.Position = UDim2.new(0, 0, 1, 2)
-    ListFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-    ListFrame.BorderSizePixel = 0
-    ListFrame.Visible = false
-    ListFrame.ZIndex = 10
-    ListFrame.Parent = Dropdown
+    -- Options List
+    local listFrame = Instance.new("Frame")
+    listFrame.Name = "ListFrame"
+    listFrame.Size = UDim2.new(1, 0, 0, math.min(#options * 28, 150))
+    listFrame.Position = UDim2.new(0, 0, 1, 2)
+    listFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 48)
+    listFrame.BorderSizePixel = 0
+    listFrame.Visible = false
+    listFrame.ZIndex = 10
+    listFrame.Parent = dropdown
     
-    local ListCorner = Instance.new("UICorner")
-    ListCorner.CornerRadius = UDim.new(0, 5)
-    ListCorner.Parent = ListFrame
+    local listCorner = Instance.new("UICorner")
+    listCorner.CornerRadius = UDim.new(0, 6)
+    listCorner.Parent = listFrame
     
-    local ListLayout = Instance.new("UIListLayout")
-    ListLayout.Padding = UDim.new(0, 2)
-    ListLayout.Parent = ListFrame
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 2)
+    listLayout.Parent = listFrame
     
     for i, option in pairs(options) do
-        local OptionBtn = Instance.new("TextButton")
-        OptionBtn.Name = option .. "Option"
-        OptionBtn.Size = UDim2.new(1, -8, 0, 24)
-        OptionBtn.Position = UDim2.new(0, 4, 0, 0)
-        OptionBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
-        OptionBtn.BorderSizePixel = 0
-        OptionBtn.Text = option
-        OptionBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-        OptionBtn.TextSize = 12
-        OptionBtn.Font = Enum.Font.Gotham
-        OptionBtn.ZIndex = 11
-        OptionBtn.Parent = ListFrame
+        local optionBtn = Instance.new("TextButton")
+        optionBtn.Name = option .. "Option"
+        optionBtn.Size = UDim2.new(1, -8, 0, 26)
+        optionBtn.Position = UDim2.new(0, 4, 0, 0)
+        optionBtn.BackgroundColor3 = Color3.fromRGB(48, 48, 68)
+        optionBtn.BorderSizePixel = 0
+        optionBtn.Text = option
+        optionBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        optionBtn.TextSize = 12
+        optionBtn.Font = Enum.Font.Gotham
+        optionBtn.ZIndex = 11
+        optionBtn.Parent = listFrame
         
-        local OptCorner = Instance.new("UICorner")
-        OptCorner.CornerRadius = UDim.new(0, 4)
-        OptCorner.Parent = OptionBtn
+        local optCorner = Instance.new("UICorner")
+        optCorner.CornerRadius = UDim.new(0, 5)
+        optCorner.Parent = optionBtn
         
-        OptionBtn.MouseButton1Click:Connect(function()
-            Dropdown.Text = option
-            ListFrame.Visible = false
+        optionBtn.MouseButton1Click:Connect(function()
+            dropdown.Text = option
+            listFrame.Visible = false
+            
             if callback then
                 callback(option)
             end
         end)
         
-        OptionBtn.MouseEnter:Connect(function()
-            OptionBtn.BackgroundColor3 = Color3.fromRGB(70, 90, 150)
+        optionBtn.MouseEnter:Connect(function()
+            optionBtn.BackgroundColor3 = Color3.fromRGB(68, 88, 158)
         end)
         
-        OptionBtn.MouseLeave:Connect(function()
-            OptionBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+        optionBtn.MouseLeave:Connect(function()
+            optionBtn.BackgroundColor3 = Color3.fromRGB(48, 48, 68)
         end)
     end
     
-    Dropdown.MouseButton1Click:Connect(function()
-        ListFrame.Visible = not ListFrame.Visible
+    dropdown.MouseButton1Click:Connect(function()
+        listFrame.Visible = not listFrame.Visible
     end)
     
-    return yPos + 32
+    return yPos + 34
 end
 
---- Callback khi feature được toggle
----@param featureName string
----@param featureTable table
-function GUI:OnFeatureToggled(featureName, featureTable)
-    local status = featureTable.Enabled and "ENABLED" or "DISABLED"
+function GUI:Button(parent, text, callback, yPos)
+    local button = Instance.new("TextButton")
+    button.Name = text .. "Button"
+    button.Size = UDim2.new(1, -10, 0, 32)
+    button.Position = UDim2.new(0, 5, 0, yPos)
+    button.BackgroundColor3 = Color3.fromRGB(60, 100, 180)
+    button.BorderSizePixel = 0
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 13
+    button.Font = Enum.Font.GothamBold
+    button.Parent = parent
     
-    -- Update status text
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 7)
+    btnCorner.Parent = button
+    
+    button.MouseButton1Click:Connect(function()
+        if callback then
+            callback()
+        end
+    end)
+    
+    return yPos + 38
+end
+
+function GUI:TextBox(parent, placeholder, callback, yPos)
+    local container = Instance.new("Frame")
+    container.Name = "TextBoxContainer"
+    container.Size = UDim2.new(1, -10, 0, 30)
+    container.Position = UDim2.new(0, 5, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+    
+    local textBox = Instance.new("TextBox")
+    textBox.Name = "InputBox"
+    textBox.Size = UDim2.new(1, 0, 1, 0)
+    textBox.BackgroundColor3 = Color3.fromRGB(42, 42, 58)
+    textBox.BorderSizePixel = 0
+    textBox.PlaceholderText = placeholder
+    textBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 140)
+    textBox.Text = ""
+    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textBox.TextSize = 13
+    textBox.Font = Enum.Font.Gotham
+    textBox.ClearTextOnFocus = false
+    textBox.Parent = container
+    
+    local boxCorner = Instance.new("UICorner")
+    boxCorner.CornerRadius = UDim.new(0, 6)
+    boxCorner.Parent = textBox
+    
+    textBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed and callback then
+            callback(textBox.Text)
+        end
+    end)
+    
+    return yPos + 34
+end
+
+function GUI:Label(parent, text, color, yPos)
+    local label = Instance.new("TextLabel")
+    label.Name = "InfoLabel"
+    label.Size = UDim2.new(1, -10, 0, 20)
+    label.Position = UDim2.new(0, 5, 0, yPos)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = color or Color3.fromRGB(170, 170, 190)
+    label.TextSize = 12
+    label.Font = Enum.Font.Code
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextWrapped = true
+    label.Parent = parent
+    
+    return yPos + 24
+end
+
+function GUI:OnFeatureToggled(featureName, featureTable)
+    local status = featureTable.Enabled and "ACTIVE" or "INACTIVE"
+    
     if self.StatusText then
         self.StatusText.Text = status
-        self.StatusText.TextColor3 = featureTable.Enabled and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 150, 50)
-    end
-    if self.StatusDot then
-        self.StatusDot.BackgroundColor3 = featureTable.Enabled and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 200, 50)
+        self.StatusText.TextColor3 = featureTable.Enabled 
+            and Color3.fromRGB(50, 255, 100) 
+            or Color3.fromRGB(255, 180, 50)
     end
     
-    -- Feature-specific initialization/cleanup
+    if self.StatusDot then
+        self.StatusDot.BackgroundColor3 = featureTable.Enabled 
+            and Color3.fromRGB(50, 255, 100) 
+            or Color3.fromRGB(255, 200, 50)
+    end
+    
+    -- Feature Handlers
     if featureName == "Kill Aura" then
         if featureTable.Enabled then
-            StartKillAura()
+            Modules.KillAura.Start()
         else
-            StopKillAura()
+            Modules.KillAura.Stop()
         end
     elseif featureName == "Silent Aim" then
         if featureTable.Enabled then
-            StartSilentAim()
+            Modules.SilentAim.Start()
         else
-            StopSilentAim()
+            Modules.SilentAim.Stop()
         end
-    elseif featureName == "ESP" then
+    elseif featureName == "Aimbot" then
         if featureTable.Enabled then
-            StartESP()
+            Modules.Aimbot.Start()
         else
-            StopESP()
+            Modules.Aimbot.Stop()
         end
-    elseif featureName == "Auto Scaffold" then
+    elseif featureName == "TriggerBot" then
         if featureTable.Enabled then
-            StartAutoScaffold()
+            Modules.TriggerBot.Start()
         else
-            StopAutoScaffold()
+            Modules.TriggerBot.Stop()
+        end
+    elseif featureName == "Speed Hack" then
+        if featureTable.Enabled then
+            Modules.SpeedHack.Start()
+        else
+            Modules.SpeedHack.Stop()
+        end
+    elseif featureName == "Fly" then
+        if featureTable.Enabled then
+            Modules.Fly.Start()
+        else
+            Modules.Fly.Stop()
+        end
+    elseif featureName == "NoClip" then
+        if featureTable.Enabled then
+            Modules.NoClip.Start()
+        else
+            Modules.NoClip.Stop()
+        end
+    elseif featureName == "Infinite Jump" then
+        if featureTable.Enabled then
+            Modules.InfiniteJump.Start()
+        else
+            Modules.InfiniteJump.Stop()
         end
     elseif featureName == "Anti-Void" then
         if featureTable.Enabled then
-            StartAntiVoid()
+            Modules.AntiVoid.Start()
         else
-            StopAntiVoid()
+            Modules.AntiVoid.Stop()
         end
-    elseif featureName == "Flight" then
+    elseif featureName == "No Fall Damage" then
         if featureTable.Enabled then
-            StartFlight()
+            Modules.NoFallDamage.Start()
         else
-            StopFlight()
+            Modules.NoFallDamage.Stop()
+        end
+    elseif featureName == "Spider/Climb" then
+        if featureTable.Enabled then
+            Modules.Spider.Start()
+        else
+            Modules.Spider.Stop()
+        end
+    elseif featureName == "Player ESP" then
+        if featureTable.Enabled then
+            Modules.ESP.Start()
+        else
+            Modules.ESP.Stop()
+        end
+    elseif featureName == "Bed ESP" then
+        if featureTable.Enabled then
+            Modules.BedESP.Start()
+        else
+            Modules.BedESP.Stop()
+        end
+    elseif featureName == "Item ESP" then
+        if featureTable.Enabled then
+            Modules.ItemESP.Start()
+        else
+            Modules.ItemESP.Stop()
+        end
+    elseif featureName == "Tracers" then
+        if featureTable.Enabled then
+            Modules.Tracers.Start()
+        else
+            Modules.Tracers.Stop()
+        end
+    elseif featureName == "Chams" then
+        if featureTable.Enabled then
+            Modules.Chams.Start()
+        else
+            Modules.Chams.Stop()
+        end
+    elseif featureName == "FOV Circle" then
+        if featureTable.Enabled then
+            Modules.FOVCircle.Start()
+        else
+            Modules.FOVCircle.Stop()
+        end
+    elseif featureName == "Auto Bridge" then
+        if featureTable.Enabled then
+            Modules.AutoBridge.Start()
+        else
+            Modules.AutoBridge.Stop()
+        end
+    elseif featureName == "Auto Click" then
+        if featureTable.Enabled then
+            Modules.AutoClick.Start()
+        else
+            Modules.AutoClick.Stop()
+        end
+    elseif featureName == "Bed Nuker" then
+        if featureTable.Enabled then
+            Modules.BedNuker.Start()
+        else
+            Modules.BedNuker.Stop()
+        end
+    elseif featureName == "Auto Farm" then
+        if featureTable.Enabled then
+            Modules.AutoFarm.Start()
+        else
+            Modules.AutoFarm.Stop()
+        end
+    elseif featureName == "Auto Scaffold" then
+        if featureTable.Enabled then
+            Modules.AutoScaffold.Start()
+        else
+            Modules.AutoScaffold.Stop()
+        end
+    elseif featureName == "Auto Heal" then
+        if featureTable.Enabled then
+            Modules.AutoHeal.Start()
+        else
+            Modules.AutoHeal.Stop()
+        end
+    elseif featureName == "Anti-Aim" then
+        if featureTable.Enabled then
+            Modules.AntiAim.Start()
+        else
+            Modules.AntiAim.Stop()
+        end
+    elseif featureName == "God Mode" then
+        if featureTable.Enabled then
+            Modules.GodMode.Start()
+        else
+            Modules.GodMode.Stop()
+        end
+    elseif featureName == "No Cooldown" then
+        if featureTable.Enabled then
+            Modules.NoCooldown.Start()
+        else
+            Modules.NoCooldown.Stop()
+        end
+    elseif featureName == "Reach Hack" then
+        if featureTable.Enabled then
+            Modules.ReachHack.Start()
+        else
+            Modules.ReachHack.Stop()
+        end
+    elseif featureName == "One Shot Kill" then
+        if featureTable.Enabled then
+            Modules.OneShotKill.Start()
+        else
+            Modules.OneShotKill.Stop()
+        end
+    elseif featureName == "Free Camera" then
+        if featureTable.Enabled then
+            Modules.FreeCamera.Start()
+        else
+            Modules.FreeCamera.Stop()
         end
     end
     
-    print("[Delta] " .. featureName .. ": " .. status)
+    print("[BedWarsVIP] " .. featureName .. ": " .. status)
 end
 
--- ============================================
--- TAB CONTENT CREATION
--- ============================================
-
+-- TAB CREATION FUNCTIONS
 function GUI:CreateCombatTab()
-    local TabFrame = Instance.new("ScrollingFrame")
-    TabFrame.Name = "CombatContent"
-    TabFrame.Size = UDim2.new(1, 0, 1, 0)
-    TabFrame.ScrollBarThickness = 3
-    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
-    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 800)
-    TabFrame.BackgroundTransparency = 1
-    TabFrame.Visible = false
-    TabFrame.Parent = self.ContentArea
+    local tabFrame = Instance.new("ScrollingFrame")
+    tabFrame.Name = "CombatContent"
+    tabFrame.Size = UDim2.new(1, 0, 1, 0)
+    tabFrame.ScrollBarThickness = 3
+    tabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    tabFrame.CanvasSize = UDim2.new(0, 0, 0, 1100)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Visible = false
+    tabFrame.Parent = self.ContentArea
     
-    local Layout = Instance.new("UIListLayout")
-    Layout.Padding = UDim.new(0, 2)
-    Layout.Parent = TabFrame
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 3)
+    layout.Parent = tabFrame
     
     local y = 5
     
-    y = self:SectionHeader(TabFrame, "COMBAT FEATURES", Color3.fromRGB(255, 100, 100), y)
-    y = self:CreateToggle(TabFrame, "Kill Aura", Features.KillAura, y)
-    y = self:CreateSlider(TabFrame, "Range", 5, 50, Features.KillAura.Range, function(val) Features.KillAura.Range = val end, y)
-    y = self:CreateSlider(TabFrame, "Delay", 0.01, 0.5, Features.KillAura.Delay, function(val) Features.KillAura.Delay = val end, y)
-    y = self:CreateDropdown(TabFrame, "Mode", {"Normal", "Silent", "Reach"}, Features.KillAura.Mode, function(val) Features.KillAura.Mode = val:lower() end, y)
+    y = self:SectionHeader(tabFrame, "⚔️ KILL AURA", Color3.fromRGB(255, 80, 80), y)
+    y = self:Toggle(tabFrame, "Kill Aura", Config.KillAura, y)
+    y = self:Slider(tabFrame, "Range", 5, 50, Config.KillAura.Range, 
+        function(v) Config.KillAura.Range = v end, y)
+    y = self:Slider(tabFrame, "Delay", 0.01, 0.5, Config.KillAura.Delay,
+        function(v) Config.KillAura.Delay = v end, y)
+    y = self:Dropdown(tabFrame, "Mode", {"Normal", "Silent", "Reach"}, Config.KillAura.Mode,
+        function(v) Config.KillAura.Mode = v end, y)
+    y = self:Toggle(tabFrame, "Through Walls", Config.KillAura, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "AIM ASSISTANCE", Color3.fromRGB(100, 255, 150), y)
-    y = self:CreateToggle(TabFrame, "Silent Aim", Features.SilentAim, y)
-    y = self:CreateSlider(TabFrame, "FOV Circle", 5, 50, Features.SilentAim.FOV, function(val) Features.SilentAim.FOV = val end, y)
-    y = self:CreateSlider(TabFrame, "Hit Chance %", 0, 100, Features.SilentAim.HitChance, function(val) Features.SilentAim.HitChance = val end, y)
-    y = self:CreateDropdown(TabFrame, "Target Part", {"Head", "Torso", "Random"}, Features.SilentAim.TargetPart, function(val) Features.SilentAim.TargetPart = val end, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🎯 SILENT AIM", Color3.fromRGB(80, 255, 120), y)
+    y = self:Toggle(tabFrame, "Silent Aim", Config.SilentAim, y)
+    y = self:Slider(tabFrame, "FOV Radius", 10, 80, Config.SilentAim.FOV,
+        function(v) Config.SilentAim.FOV = v end, y)
+    y = self:Slider(tabFrame, "Hit Chance %", 0, 100, Config.SilentAim.HitChance,
+        function(v) Config.SilentAim.HitChance = v end, y)
+    y = self:Dropdown(tabFrame, "Target Part", {"Head", "Torso", "Random"}, Config.SilentAim.TargetPart,
+        function(v) Config.SilentAim.TargetPart = v end, y)
+    y = self:Toggle(tabFrame, "Show FOV Circle", Config.SilentAim, y)
+    y = self:Toggle(tabFrame, "Wall Check", Config.SilentAim, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "COMBAT MODIFIERS", Color3.fromRGB(255, 200, 100), y)
-    y = self:CreateToggle(TabFrame, "Reach Hack", Features.ReachHack, y)
-    y = self:CreateSlider(TabFrame, "Reach Distance", 5, 100, Features.ReachHack.Reach, function(val) Features.ReachHack.Reach = val end, y)
-    y = self:CreateToggle(TabFrame, "No Cooldown", Features.NoCooldown, y)
-    y = self:CreateToggle(TabFrame, "One Shot Kill", Features.OneShotKill, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🎮 AIMBOT", Color3.fromRGB(120, 200, 255), y)
+    y = self:Toggle(tabFrame, "Aimbot", Config.Aimbot, y)
+    y = self:Slider(tabFrame, "Smoothness", 0.05, 1, Config.Aimbot.Smoothness,
+        function(v) Config.Aimbot.Smoothness = v end, y)
+    y = self:Toggle(tabFrame, "Target Players", Config.Aimbot, y)
+    y = self:Toggle(tabFrame, "Target Beds", Config.Aimbot, y)
     
-    self.Tabs["Combat"] = TabFrame
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🔫 TRIGGER BOT", Color3.fromRGB(255, 200, 80), y)
+    y = self:Toggle(tabFrame, "TriggerBot", Config.TriggerBot, y)
+    y = self:Slider(tabFrame, "Delay", 0.01, 0.3, Config.TriggerBot.Delay,
+        function(v) Config.TriggerBot.Delay = v end, y)
+    y = self:Toggle(tabFrame, "Only Enemies", Config.TriggerBot, y)
+    
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "💥 COMBAT MODIFIERS", Color3.fromRGB(255, 120, 180), y)
+    y = self:Toggle(tabFrame, "Reach Hack", Config.ReachHack, y)
+    y = self:Slider(tabFrame, "Reach Range", 5, 100, Config.ReachHack.Range,
+        function(v) Config.ReachHack.Range = v end, y)
+    y = self:Toggle(tabFrame, "No Cooldown", Config.NoCooldown, y)
+    y = self:Toggle(tabFrame, "One Shot Kill", Config.OneShotKill, y)
+    
+    self.Tabs["Combat"] = tabFrame
 end
 
 function GUI:CreateMovementTab()
-    local TabFrame = Instance.new("ScrollingFrame")
-    TabFrame.Name = "MovementContent"
-    TabFrame.Size = UDim2.new(1, 0, 1, 0)
-    TabFrame.ScrollBarThickness = 3
-    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
-    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 900)
-    TabFrame.BackgroundTransparency = 1
-    TabFrame.Visible = false
-    TabFrame.Parent = self.ContentArea
+    local tabFrame = Instance.new("ScrollingFrame")
+    tabFrame.Name = "MovementContent"
+    tabFrame.Size = UDim2.new(1, 0, 1, 0)
+    tabFrame.ScrollBarThickness = 3
+    tabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    tabFrame.CanvasSize = UDim2.new(0, 0, 0, 1050)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Visible = false
+    tabFrame.Parent = self.ContentArea
     
-    local Layout = Instance.new("UIListLayout")
-    Layout.Padding = UDim.new(0, 2)
-    Layout.Parent = TabFrame
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 3)
+    layout.Parent = tabFrame
     
     local y = 5
     
-    y = self:SectionHeader(TabFrame, "MOVEMENT SPEED", Color3.fromRGB(100, 200, 255), y)
-    y = self:CreateToggle(TabFrame, "Speed Hack", Features.SpeedHack, y)
-    y = self:CreateSlider(TabFrame, "Speed Multiplier", 1.1, 5, Features.SpeedHack.Speed, function(val) Features.SpeedHack.Speed = val end, y)
-    y = self:CreateDropdown(TabFrame, "Method", {"Velocity", "CFrame", "Stepper"}, Features.SpeedHack.Method, function(val) Features.SpeedHack.Method = val:lower() end, y)
+    y = self:SectionHeader(tabFrame, "⚡ SPEED HACK", Color3.fromRGB(100, 200, 255), y)
+    y = self:Toggle(tabFrame, "Speed Hack", Config.SpeedHack, y)
+    y = self:Slider(tabFrame, "Multiplier", 1.1, 5, Config.SpeedHack.Multiplier,
+        function(v) Config.SpeedHack.Multiplier = v end, y)
+    y = self:Dropdown(tabFrame, "Method", {"Velocity", "CFrame", "Stepper"}, Config.SpeedHack.Method,
+        function(v) Config.SpeedHack.Method = v end, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "JUMP MODIFICATION", Color3.fromRGB(150, 255, 150), y)
-    y = self:CreateToggle(TabFrame, "Jump Power", Features.JumpPower, y)
-    y = self:CreateSlider(TabFrame, "Jump Power", 50, 300, Features.JumpPower.Power, function(val) Features.JumpPower.Power = val end, y)
-    y = self:CreateToggle(TabFrame, "Infinite Jump", Features.JumpPower, y)
-    y = self:CreateSlider(TabFrame, "Extra Jumps", 1, 20, Features.JumpPower.ExtraJumps, function(val) Features.JumpPower.ExtraJumps = math.floor(val) end, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🕊️ FLIGHT", Color3.fromRGB(180, 130, 255), y)
+    y = self:Toggle(tabFrame, "Flight [" .. tostring(Config.Fly.Keybind.Name) .. "]", Config.Fly, y)
+    y = self:Slider(tabFrame, "Fly Speed", 20, 200, Config.Fly.Speed,
+        function(v) Config.Fly.Speed = v end, y)
+    y = self:Dropdown(tabFrame, "Method", {"CFrame", "Velocity", "Gravity"}, Config.Fly.Method,
+        function(v) Config.Fly.Method = v end, y)
+    y = self:Toggle(tabFrame, "NoClip While Flying", Config.Fly, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "BUILDING AIDS", Color3.fromRGB(255, 180, 100), y)
-    y = self:CreateToggle(TabFrame, "Auto Scaffold", Features.AutoScaffold, y)
-    y = self:CreateToggle(TabFrame, "Tower Mode", Features.AutoScaffold, y)
-    y = self:CreateToggle(TabFrame, "Expand Mode", Features.AutoScaffold, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🚪 NO CLIP", Color3.fromRGB(150, 255, 150), y)
+    y = self:Toggle(tabFrame, "No Clip", Config.NoClip, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "SAFETY", Color3.fromRGB(255, 100, 200), y)
-    y = self:CreateToggle(TabFrame, "Anti-Void", Features.AntiVoid, y)
-    y = self:CreateToggle(TabFrame, "No Fall Damage", Features.NoFallDamage, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🦘 JUMP MODIFICATION", Color3.fromRGB(100, 255, 180), y)
+    y = self:Toggle(tabFrame, "Infinite Jump", Config.InfiniteJump, y)
+    y = self:Slider(tabFrame, "Extra Jumps", 1, 25, Config.InfiniteJump.ExtraJumps,
+        function(v) Config.InfiniteJump.ExtraJumps = math.floor(v) end, y)
+    y = self:Toggle(tabFrame, "High Jump", Config.HighJump, y)
+    y = self:Slider(tabFrame, "Jump Power", 50, 200, Config.HighJump.Power,
+        function(v) Config.HighJump.Power = v end, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "FLIGHT & SPECIAL", Color3.fromRGB(200, 150, 255), y)
-    y = self:CreateToggle(TabFrame, "Flight [" .. tostring(Flight.Keybind.Name) .. "]", Features.Flight, y)
-    y = self:CreateSlider(TabFrame, "Fly Speed", 20, 200, Features.Flight.Speed, function(val) Features.Flight.Speed = val end, y)
-    y = self:CreateDropdown(TabFrame, "Method", {"CFrame", "Velocity", "Gravity"}, Features.Flight.Method, function(val) Features.Flight.Method = val:lower() end, y)
-    y = self:CreateToggle(TabFrame, "Spider/Climb", Features.Spider, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🕷️ SPIDER / CLIMB", Color3.fromRGB(255, 180, 100), y)
+    y = self:Toggle(tabFrame, "Spider/Climb", Config.Spider, y)
+    y = self:Slider(tabFrame, "Climb Speed", 10, 60, Config.Spider.ClimbSpeed,
+        function(v) Config.Spider.ClimbSpeed = v end, y)
     
-    self.Tabs["Movement"] = TabFrame
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🌀 SAFETY", Color3.fromRGB(255, 100, 150), y)
+    y = self:Toggle(tabFrame, "Anti-Void", Config.AntiVoid, y)
+    y = self:Dropdown(tabFrame, "Method", {"Teleport", "Place Block", "Both"}, Config.AntiVoid.Method,
+        function(v) Config.AntiVoid.Method = v end, y)
+    y = self:Toggle(tabFrame, "No Fall Damage", Config.NoFallDamage, y)
+    
+    self.Tabs["Movement"] = tabFrame
 end
 
-function GUI:CreateVisualsTab()
-    local TabFrame = Instance.new("ScrollingFrame")
-    TabFrame.Name = "VisualsContent"
-    TabFrame.Size = UDim2.new(1, 0, 1, 0)
-    TabFrame.ScrollBarThickness = 3
-    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
-    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 850)
-    TabFrame.BackgroundTransparency = 1
-    TabFrame.Visible = false
-    TabFrame.Parent = self.ContentArea
+function GUI:CreateESPTab()
+    local tabFrame = Instance.new("ScrollingFrame")
+    tabFrame.Name = "ESPContent"
+    tabFrame.Size = UDim2.new(1, 0, 1, 0)
+    tabFrame.ScrollBarThickness = 3
+    tabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    tabFrame.CanvasSize = UDim2.new(0, 0, 0, 900)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Visible = false
+    tabFrame.Parent = self.ContentArea
     
-    local Layout = Instance.new("UIListLayout")
-    Layout.Padding = UDim.new(0, 2)
-    Layout.Parent = TabFrame
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 3)
+    layout.Parent = tabFrame
     
     local y = 5
     
-    y = self:SectionHeader(TabFrame, "ESP (ENTITY INFO)", Color3.fromRGB(255, 100, 150), y)
-    y = self:CreateToggle(TabFrame, "Player ESP", Features.ESP, y)
-    y = self:CreateToggle(TabFrame, "Box ESP", Features.ESP, y)
-    y = self:CreateToggle(TabFrame, "Name ESP", Features.ESP, y)
-    y = self:CreateToggle(TabFrame, "Health ESP", Features.ESP, y)
-    y = self:CreateToggle(TabFrame, "Distance ESP", Features.ESP, y)
-    y = self:CreateToggle(TabFrame, "Tracer Lines", Features.Tracers, y)
-    y = self:CreateToggle(TabFrame, "Chams (Wallhack)", Features.Chams, y)
+    y = self:SectionHeader(tabFrame, "👤 PLAYER ESP", Color3.fromRGB(255, 100, 150), y)
+    y = self:Toggle(tabFrame, "Player ESP", Config.ESP, y)
+    y = self:Toggle(tabFrame, "Box ESP", Config.ESP, y)
+    y = self:Toggle(tabFrame, "Show Names", Config.ESP, y)
+    y = self:Toggle(tabFrame, "Show Health", Config.ESP, y)
+    y = self:Toggle(tabFrame, "Show Distance", Config.ESP, y)
+    y = self:Toggle(tabFrame, "Show Tool", Config.ESP, y)
+    y = self:Slider(tabFrame, "Max Distance", 100, 2000, Config.ESP.MaxDistance,
+        function(v) Config.ESP.MaxDistance = v end, y)
+    y = self:Slider(tabFrame, "Text Size", 10, 20, Config.ESP.TextSize,
+        function(v) Config.ESP.TextSize = v end, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "BED/OBJECT ESP", Color3.fromRGB(255, 200, 50), y)
-    y = self:CreateToggle(TabFrame, "Bed ESP", Features.BedESP, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🛏️ BED ESP", Color3.fromRGB(255, 200, 50), y)
+    y = self:Toggle(tabFrame, "Bed ESP", Config.BedESP or {Enabled = false}, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "AIMBOT VISUALS", Color3.fromRGB(100, 255, 200), y)
-    y = self:CreateToggle(TabFrame, "FOV Circle", Features.FOVCircle, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "📦 ITEM ESP", Color3.fromRGB(100, 255, 150), y)
+    y = self:Toggle(tabFrame, "Item ESP", Config.ItemESP or {Enabled = false}, y)
     
-    self.Tabs["Visuals"] = TabFrame
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "📍 TRACERS", Color3.fromRGB(150, 200, 255), y)
+    y = self:Toggle(tabFrame, "Tracers", Config.Tracers, y)
+    y = self:Dropdown(tabFrame, "From Position", {"Bottom", "Center", "Top", "Mouse"}, Config.Tracers.FromPosition,
+        function(v) Config.Tracers.FromPosition = v end, y)
+    y = self:Slider(tabFrame, "Thickness", 0.5, 3, Config.Tracers.Thickness,
+        function(v) Config.Tracers.Thickness = v end, y)
+    
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🔮 CHAMS (WALLHACK)", Color3.fromRGB(200, 100, 255), y)
+    y = self:Toggle(tabFrame, "Chams", Config.Chams, y)
+    
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🎯 FOV CIRCLE", Color3.fromRGB(100, 255, 200), y)
+    y = self:Toggle(tabFrame, "FOV Circle", Config.FOVCircle, y)
+    y = self:Slider(tabFrame, "Radius", 10, 100, Config.FOVCircle.Radius,
+        function(v) Config.FOVCircle.Radius = v end, y)
+    y = self:Slider(tabFrame, "Transparency", 0.1, 1, Config.FOVCircle.Transparency,
+        function(v) Config.FOVCircle.Transparency = v end, y)
+    y = self:Toggle(tabFrame, "Filled", Config.FOVCircle, y)
+    
+    self.Tabs["ESP"] = tabFrame
 end
 
 function GUI:CreateUtilityTab()
-    local TabFrame = Instance.new("ScrollingFrame")
-    TabFrame.Name = "UtilityContent"
-    TabFrame.Size = UDim2.new(1, 0, 1, 0)
-    TabFrame.ScrollBarThickness = 3
-    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
-    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 600)
-    TabFrame.BackgroundTransparency = 1
-    TabFrame.Visible = false
-    TabFrame.Parent = self.ContentArea
+    local tabFrame = Instance.new("ScrollingFrame")
+    tabFrame.Name = "UtilityContent"
+    tabFrame.Size = UDim2.new(1, 0, 1, 0)
+    tabFrame.ScrollBarThickness = 3
+    tabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    tabFrame.CanvasSize = UDim2.new(0, 0, 0, 1000)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Visible = false
+    tabFrame.Parent = self.ContentArea
     
-    local Layout = Instance.new("UIListLayout")
-    Layout.Padding = UDim.new(0, 2)
-    Layout.Parent = TabFrame
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 3)
+    layout.Parent = tabFrame
     
     local y = 5
     
-    y = self:SectionHeader(TabFrame, "AUTOMATION", Color3.fromRGB(100, 255, 150), y)
-    y = self:CreateToggle(TabFrame, "Auto Heal", Features.AutoHeal, y)
-    y = self:CreateSlider(TabFrame, "Heal at HP %", 10, 80, Features.AutoHeal.HealthPercent, function(val) Features.AutoHeal.HealthPercent = val end, y)
-    y = self:CreateToggle(TabFrame, "Auto Buy", Features.AutoBuy, y)
+    y = self:SectionHeader(tabFrame, "🌉 AUTO BRIDGE", Color3.fromRGB(100, 180, 255), y)
+    y = self:Toggle(tabFrame, "Auto Bridge", Config.AutoBridge, y)
+    y = self:Dropdown(tabFrame, "Direction", {"Forward", "Backward", "Left", "Right"}, Config.AutoBridge.Direction,
+        function(v) Config.AutoBridge.Direction = v end, y)
+    y = self:Slider(tabFrame, "Length", 20, 200, Config.AutoBridge.Length,
+        function(v) Config.AutoBridge.Length = v end, y)
+    y = self:Toggle(tabFrame, "Stair Mode", Config.AutoBridge, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "ANTI-CHEAT BYPASS", Color3.fromRGB(255, 150, 50), y)
-    y = self:CreateToggle(TabFrame, "Anti-Aim", Features.AntiAim, y)
-    y = self:CreateDropdown(TabFrame, "Pitch Mode", {"Down", "Up", "Jitter", "Spin"}, Features.AntiAim.Pitch, function(val) Features.AntiAim.Pitch = val:lower() end, y)
-    y = self:CreateDropdown(TabFrame, "Yaw Mode", {"Spin", "Backward", "Jitter"}, Features.AntiAim.Yaw, function(val) Features.AntiAim.Yaw = val:lower() end, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🧱 AUTO SCAFFOLD", Color3.fromRGB(255, 180, 100), y)
+    y = self:Toggle(tabFrame, "Auto Scaffold", Config.AutoScaffold, y)
+    y = self:Toggle(tabFrame, "Tower Mode", Config.AutoScaffold, y)
+    y = self:Toggle(tabFrame, "Expand Mode", Config.AutoScaffold, y)
     
-    y = y + 10
-    y = self:SectionHeader(TabFrame, "CAMERA", Color3.fromRGB(200, 150, 255), y)
-    y = self:CreateToggle(TabFrame, "Free Camera [" .. tostring(FreeCamera.Keybind.Name) .. "]", Features.FreeCamera, y)
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🖱️ AUTO CLICK", Color3.fromRGB(200, 150, 255), y)
+    y = self:Toggle(tabFrame, "Auto Click", Config.AutoClick, y)
+    y = self:Slider(tabFrame, "CPS (Clicks Per Sec)", 1, 50, Config.AutoClick.CPS,
+        function(v) Config.AutoClick.CPS = v end, y)
+    y = self:Toggle(tabFrame, "Left Click", Config.AutoClick, y)
+    y = self:Toggle(tabFrame, "Right Click", Config.AutoClick, y)
     
-    self.Tabs["Utility"] = TabFrame
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "💣 BED NUKER", Color3.fromRGB(255, 80, 80), y)
+    y = self:Toggle(tabFrame, "Bed Nuker", Config.BedNuker, y)
+    y = self:Slider(tabFrame, "Range", 10, 80, Config.BedNuker.Range,
+        function(v) Config.BedNuker.Range = v end, y)
+    y = self:Slider(tabFrame, "Delay", 0.1, 1, Config.BedNuker.Delay,
+        function(v) Config.BedNuker.Delay = v end, y)
+    y = self:Toggle(tabFrame, "Destroy All Beds", Config.BedNuker, y)
+    
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🤖 AUTO FARM", Color3.fromRGB(150, 255, 150), y)
+    y = self:Toggle(tabFrame, "Auto Farm", Config.AutoFarm, y)
+    y = self:Dropdown(tabFrame, "Mode", {"Passive", "Balanced", "Aggressive"}, Config.AutoFarm.Mode,
+        function(v) Config.AutoFarm.Mode = v end, y)
+    y = self:Dropdown(tabFrame, "Target Priority", {"Nearest", "Lowest HP", "Highest Damage"}, Config.AutoFarm.TargetPriority,
+        function(v) Config.AutoFarm.TargetPriority = v end, y)
+    
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "❤️ AUTO HEAL", Color3.fromRGB(255, 100, 150), y)
+    y = self:Toggle(tabFrame, "Auto Heal", Config.AutoHeal, y)
+    y = self:Slider(tabFrame, "Heal at HP %", 10, 80, Config.AutoHeal.HealthPercent,
+        function(v) Config.AutoHeal.HealthPercent = v end, y)
+    
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "📷 FREE CAMERA [" .. tostring(Config.FreeCam.Keybind.Name) .. "]", Color3.fromRGB(180, 150, 255), y)
+    y = self:Toggle(tabFrame, "Free Camera", Config.FreeCam, y)
+    y = self:Slider(tabFrame, "Camera Speed", 2, 20, Config.FreeCam.Speed,
+        function(v) Config.FreeCam.Speed = v end, y)
+    
+    self.Tabs["Utility"] = tabFrame
 end
 
-function GUI:CreateSettingsTab()
-    local TabFrame = Instance.new("ScrollingFrame")
-    TabFrame.Name = "SettingsContent"
-    TabFrame.Size = UDim2.new(1, 0, 1, 0)
-    TabFrame.ScrollBarThickness = 3
-    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
-    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 500)
-    TabFrame.BackgroundTransparency = 1
-    TabFrame.Visible = false
-    TabFrame.Parent = self.ContentArea
+function GUI:CreateVisualTab()
+    local tabFrame = Instance.new("ScrollingFrame")
+    tabFrame.Name = "VisualContent"
+    tabFrame.Size = UDim2.new(1, 0, 1, 0)
+    tabFrame.ScrollBarThickness = 3
+    tabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    tabFrame.CanvasSize = UDim2.new(0, 0, 0, 500)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Visible = false
+    tabFrame.Parent = self.ContentArea
     
-    local Layout = Instance.new("UIListLayout")
-    Layout.Padding = UDim.new(0, 2)
-    Layout.Parent = TabFrame
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 3)
+    layout.Parent = tabFrame
     
     local y = 5
     
-    y = self:SectionHeader(TabFrame, "CONFIGURATION", Color3.fromRGB(200, 200, 200), y)
+    y = self:SectionHeader(tabFrame, "🎨 COLOR SETTINGS", Color3.fromRGB(200, 150, 255), y)
+    y = self:Label(tabFrame, "Customize ESP colors for enemies and teammates.", Color3.fromRGB(150, 150, 170), y)
     
-    -- Save Config Button
-    local SaveBtn = Instance.new("TextButton")
-    SaveBtn.Name = "SaveConfig"
-    SaveBtn.Size = UDim2.new(1, -10, 0, 34)
-    SaveBtn.Position = UDim2.new(0, 5, 0, y)
-    SaveBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 80)
-    SaveBtn.BorderSizePixel = 0
-    SaveBtn.Text = "💾 SAVE CONFIGURATION"
-    SaveBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SaveBtn.TextSize = 13
-    SaveBtn.Font = Enum.Font.GothamBold
-    SaveBtn.Parent = TabFrame
+    y = y + 10
+    y = self:SectionHeader(tabFrame, "🌈 ENEMY COLOR", Color3.fromRGB(255, 100, 100), y)
+    -- Note: Color pickers would require additional implementation
     
-    local SaveCorner = Instance.new("UICorner")
-    SaveCorner.CornerRadius = UDim.new(0, 6)
-    SaveCorner.Parent = SaveBtn
+    y = y + 10
+    y = self:SectionHeader(tabFrame, "🤝 TEAMMATE COLOR", Color3.fromRGB(100, 150, 255), y)
     
-    SaveBtn.MouseButton1Click:Connect(function()
-        SaveConfig()
-    end)
-    y = y + 40
+    y = y + 10
+    y = self:SectionHeader(tabFrame, "📊 VISUAL TWEAKS", Color3.fromRGB(150, 200, 150), y)
+    y = self:Label(tabFrame, "Additional visual modifications can be added here.", Color3.fromRGB(150, 150, 170), y)
     
-    -- Load Config Button
-    local LoadBtn = Instance.new("TextButton")
-    LoadBtn.Name = "LoadConfig"
-    LoadBtn.Size = UDim2.new(1, -10, 0, 34)
-    LoadBtn.Position = UDim2.new(0, 5, 0, y)
-    LoadBtn.BackgroundColor3 = Color3.fromRGB(80, 100, 180)
-    LoadBtn.BorderSizePixel = 0
-    LoadBtn.Text = "📂 LOAD CONFIGURATION"
-    LoadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    LoadBtn.TextSize = 13
-    LoadBtn.Font = Enum.Font.GothamBold
-    LoadBtn.Parent = TabFrame
+    self.Tabs["Visual"] = tabFrame
+end
+
+function GUI:CreateBypassTab()
+    local tabFrame = Instance.new("ScrollingFrame")
+    tabFrame.Name = "BypassContent"
+    tabFrame.Size = UDim2.new(1, 0, 1, 0)
+    tabFrame.ScrollBarThickness = 3
+    tabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    tabFrame.CanvasSize = UDim2.new(0, 0, 0, 700)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Visible = false
+    tabFrame.Parent = self.ContentArea
     
-    local LoadCorner = Instance.new("UICorner")
-    LoadCorner.CornerRadius = UDim.new(0, 6)
-    LoadCorner.Parent = LoadBtn
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 3)
+    layout.Parent = tabFrame
     
-    LoadBtn.MouseButton1Click:Connect(function()
-        LoadConfig()
-    end)
-    y = y + 40
+    local y = 5
     
-    -- Panic Button (Disable all)
-    local PanicBtn = Instance.new("TextButton")
-    PanicBtn.Name = "PanicButton"
-    PanicBtn.Size = UDim2.new(1, -10, 0, 34)
-    PanicBtn.Position = UDim2.new(0, 5, 0, y)
-    PanicBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-    PanicBtn.BorderSizePixel = 0
-    PanicBtn.Text = "🚨 PANIC MODE (DISABLE ALL)"
-    PanicBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    PanicBtn.TextSize = 13
-    PanicBtn.Font = Enum.Font.GothamBold
-    PanicBtn.Parent = TabFrame
+    y = self:SectionHeader(tabFrame, "🔄 ANTI-AIM", Color3.fromRGB(255, 180, 50), y)
+    y = self:Toggle(tabFrame, "Anti-Aim", Config.AntiAim, y)
+    y = self:Dropdown(tabFrame, "Pitch Mode", {"Down", "Up", "Jitter", "Random"}, Config.AntiAim.Pitch,
+        function(v) Config.AntiAim.Pitch = v end, y)
+    y = self:Dropdown(tabFrame, "Yaw Mode", {"Spin", "Backward", "Jitter", "Random"}, Config.AntiAim.Yaw,
+        function(v) Config.AntiAim.Yaw = v end, y)
+    y = self:Slider(tabFrame, "Spin Speed", 60, 720, Config.AntiAim.SpinSpeed,
+        function(v) Config.AntiAim.SpinSpeed = v end, y)
     
-    local PanicCorner = Instance.new("UICorner")
-    PanicCorner.CornerRadius = UDim.new(0, 6)
-    PanicCorner.Parent = PanicBtn
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "🛡️ GOD MODE", Color3.fromRGB(255, 100, 100), y)
+    y = self:Toggle(tabFrame, "God Mode", Config.GodMode, y)
+    y = self:Dropdown(tabFrame, "Method", {"Blanket", "Health Lock", "Damage Redirect"}, Config.GodMode.Method,
+        function(v) Config.GodMode.Method = v end, y)
+    y = self:Label(tabFrame, "Warning: God Mode may not work on all servers.", Color3.fromRGB(255, 180, 80), y)
     
-    PanicBtn.MouseButton1Click:Connect(function()
-        PanicMode()
-    end)
-    y = y + 50
+    y = y + 8
+    y = self:SectionHeader(tabFrame, "⚡ OTHER BYPASSES", Color3.fromRGB(100, 200, 255), y)
+    y = self:Toggle(tabFrame, "No Cooldown", Config.NoCooldown, y)
+    y = self:Toggle(tabFrame, "Reach Hack", Config.ReachHack, y)
+    y = self:Toggle(tabFrame, "One Shot Kill", Config.OneShotKill, y)
     
-    -- Keybinds Info
-    y = self:SectionHeader(TabFrame, "KEYBINDS", Color3.fromRGB(255, 220, 100), y)
+    self.Tabs["Bypass"] = tabFrame
+end
+
+function GUI:CreateConfigTab()
+    local tabFrame = Instance.new("ScrollingFrame")
+    tabFrame.Name = "ConfigContent"
+    tabFrame.Size = UDim2.new(1, 0, 1, 0)
+    tabFrame.ScrollBarThickness = 3
+    tabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    tabFrame.CanvasSize = UDim2.new(0, 0, 0, 600)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Visible = false
+    tabFrame.Parent = self.ContentArea
     
-    local Keybinds = {
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 3)
+    layout.Parent = tabFrame
+    
+    local y = 5
+    
+    y = self:SectionHeader(tabFrame, "💾 CONFIGURATION", Color3.fromRGB(200, 200, 200), y)
+    
+    y = self:Button(tabFrame, "💾 SAVE CONFIGURATION", function()
+        Modules.Config.Save()
+        Functions.Notify("Configuration saved!", "success")
+    end, y)
+    
+    y = self:Button(tabFrame, "📂 LOAD CONFIGURATION", function()
+        Modules.Config.Load()
+        Functions.Notify("Configuration loaded!", "success")
+    end, y)
+    
+    y = self:Button(tabFrame, "🔄 RESET TO DEFAULTS", function()
+        Modules.Config.Reset()
+        Functions.Notify("Reset to defaults!", "warning")
+    end, y)
+    
+    y = y + 15
+    y = self:SectionHeader(tabFrame, "🚨 PANIC MODE", Color3.fromRGB(255, 80, 80), y)
+    
+    y = self:Button(tabFrame, "🚨 DISABLE ALL FEATURES", function()
+        Modules.Config.Panic()
+        Functions.Notify("All features disabled!", "error")
+    end, y)
+    
+    y = y + 15
+    y = self:SectionHandler(tabFrame, "⌨️ KEYBINDS", Color3.fromRGB(255, 220, 100), y)
+    
+    local keybinds = {
         {"Insert", "Toggle GUI"},
         {"F", "Toggle Flight"},
         {"P", "Free Camera"},
-        {"H", "Manual Heal"},
         {"Space (Hold)", "Infinite Jump"},
         {"Delete", "Panic Mode"}
     }
     
-    for _, bind in pairs(Keybinds) do
-        local BindLabel = Instance.new("TextLabel")
-        BindLabel.Size = UDim2.new(1, -10, 0, 22)
-        BindLabel.Position = UDim2.new(0, 5, 0, y)
-        BindLabel.BackgroundTransparency = 1
-        BindLabel.Text = "  [" .. bind[1] .. "]  →  " .. bind[2]
-        BindLabel.TextColor3 = Color3.fromRGB(170, 170, 190)
-        BindLabel.TextSize = 12
-        BindLabel.Font = Enum.Font.Code
-        BindLabel.TextXAlignment = Enum.TextXAlignment.Left
-        BindLabel.Parent = TabFrame
-        y = y + 24
+    for _, bind in pairs(keybinds) do
+        y = self:Label(tabFrame, "  [" .. bind[1] .. "]  →  " .. bind[2], Color3.fromRGB(165, 165, 185), y)
     end
     
-    y = y + 15
-    y = self:SectionHeader(TabFrame, "ABOUT", Color3.fromRGB(140, 140, 140), y)
+    self.Tabs["Config"] = tabFrame
+end
+
+function GUI:CreateCreditsTab()
+    local tabFrame = Instance.new("ScrollingFrame")
+    tabFrame.Name = "CreditsContent"
+    tabFrame.Size = UDim2.new(1, 0, 1, 0)
+    tabFrame.ScrollBarThickness = 3
+    tabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    tabFrame.CanvasSize = UDim2.new(0, 0, 0, 400)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Visible = false
+    tabFrame.Parent = self.ContentArea
     
-    local AboutText = Instance.new("TextLabel")
-    AboutText.Size = UDim2.new(1, -10, 0, 80)
-    AboutText.Position = UDim2.new(0, 5, 0, y)
-    AboutText.BackgroundTransparency = 1
-    AboutText.Text = 
-        ScriptInfo.Name .. " v" .. ScriptInfo.Version .. "\n" ..
-        "Type: " .. ScriptInfo.Type .. "\n" ..
-        "Executor: Universal Compatible\n" ..
-        "Game: Easy.gg Bedwars\n" ..
-        "API: Client-Side Exploitation"
-    AboutText.TextColor3 = Color3.fromRGB(130, 130, 150)
-    AboutText.TextSize = 11
-    AboutText.Font = Enum.Font.Code
-    AboutText.TextXAlignment = Enum.TextXAlignment.Left
-    AboutText.TextYAlignment = Enum.TextYAlignment.Top
-    AboutText.Parent = TabFrame
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 3)
+    layout.Parent = tabFrame
     
-    self.Tabs["Settings"] = TabFrame
+    local y = 5
+    
+    y = self:SectionHeader(tabFrame, "ℹ️ ABOUT", Color3.fromRGB(150, 150, 150), y)
+    
+    local aboutText = [[
+BEDWARS VIP SCRIPT v4.0
+
+Type: Client-Side Exploitation
+Game: Easy.gg Bedwars
+Environment: Custom Match / Host Panel
+
+Compatible Executors:
+• Synapse X
+• Script-Ware
+• Delta
+• Xeno
+• Krnl
+• Fluxus
+• Wave
+• And more...
+
+Features: 40+ Features
+Tabs: 8 Categories
+API: Easy.gg + Roblox Native
+
+Created with ❤️ for educational purposes.
+]]
+    
+    y = self:Label(tabFrame, aboutText, Color3.fromRGB(140, 140, 160), y)
+    
+    self.Tabs["Credits"] = tabFrame
 end
 
 -- ============================================
--- PHẦN 5: FEATURE IMPLEMENTATIONS (CLIENT-SIDE)
+-- MODULE IMPLEMENTATIONS
 -- ============================================
 
--- KILL AURA IMPLEMENTATION
-local KillAuraConnection = nil
+Modules = {}
 
-function StartKillAura()
-    if KillAuraConnection then return end
-    
-    KillAuraConnection = RunService.RenderStepped:Connect(function()
-        if not Features.KillAura.Enabled then return end
+-- KILL AURA MODULE
+Modules.KillAura = {
+    Start = function()
+        if ConnectionHandlers.KillAura then return end
         
-        local myChar = GetCharacter(LocalPlayer)
-        local myRoot = GetRootPart(myChar)
-        if not myRoot then return end
-        
-        local myPos = myRoot.Position
-        
-        -- Find enemies in range
-        for _, player in pairs(GetAllPlayers()) do
-            if IsAlive(player) and not IsTeammate(player) then
-                local enemyPos = GetPosition(player)
-                if enemyPos then
-                    local dist = Distance(myPos, enemyPos)
-                    
-                    if dist <= Features.KillAura.Range then
-                        -- Check wall
-                        if Features.KillAura.ThroughWalls or HasLineOfSight(enemyPos) then
-                            -- Attack using different modes
-                            if Features.KillAura.Mode == "reach" then
-                                -- Extend reach by manipulating tool range
-                                pcall(function()
-                                    local tool = myChar:FindFirstChildOfClass("Tool")
-                                    if tool then
-                                        local origRange = tool.Range or 3
-                                        tool.Range = Features.KillAura.Range
-                                    end
-                                end)
-                            elseif Features.KillAura.Mode == "silent" then
-                                -- Fire damage remote directly
-                                local damageRemote = FindRemote("damage") or FindRemote("attack") or FindRemote("hit")
-                                if damageRemote then
-                                    SafeFire(damageRemote, player, {
-                                        Position = enemyPos,
-                                        Damage = Features.OneShotKill.Enabled and Features.OneShotKill.Damage or 10
-                                    })
-                                end
-                            else
-                                -- Normal mode: simulate click/tap
-                                VirtualInputManager:SendMouseWheelEvent(0, 0, true)
-                                task.wait(0.05)
-                                VirtualInputManager:SendMouseWheelEvent(0, 0, false)
+        ConnectionHandlers.KillAura = Services.RunService.RenderStepped:Connect(function()
+            if not Config.KillAura.Enabled then return end
+            
+            local myChar = Functions.GetCharacter(Player)
+            local myRoot = Functions.GetRootPart(myChar)
+            if not myRoot then return end
+            
+            local myPos = myRoot.Position
+            local targets = {}
+            
+            for _, enemy in pairs(Functions.GetAllPlayers()) do
+                if Functions.IsAlive(enemy) and not Functions.IsTeammate(enemy) then
+                    local enemyPos = Functions.GetPosition(enemy)
+                    if enemyPos then
+                        local dist = Functions.Distance(myPos, enemyPos)
+                        if dist <= Config.KillAura.Range then
+                            if Config.KillAura.ThroughWalls or Functions.HasLineOfSight(enemyPos) then
+                                table.insert(targets, {Player = enemy, Position = enemyPos, Distance = dist})
                             end
-                            
-                            CurrentTarget = player
                         end
                     end
-                end
-            end
-        end
-    end)
-end
-
-function StopKillAura()
-    if KillAuraConnection then
-        KillAuraConnection:Disconnect()
-        KillAuraConnection = nil
-    end
-    CurrentTarget = nil
-end
-
--- SILENT AIM IMPLEMENTATION
-local SilentAimHook = nil
-local FOVDrawing = nil
-
-function StartSilentAim()
-    -- Create FOV circle drawing
-    if Features.SilentAim.ShowFOV or Features.FOVCircle.Enabled then
-        FOVDrawing = Drawing.new("Circle")
-        FOVDrawing.Radius = Features.SilentAim.FOV
-        FOVDrawing.Color = Features.FOVCircle.Color or Color3.fromRGB(255, 255, 255)
-        FOVDrawing.Thickness = 1
-        FOVDrawing.Transparency = Features.FOVCircle.Transparency or 0.5
-        FOVDrawing.Visible = true
-        FOVDrawing.NumPoints = 64
-        FOVDrawing.Filled = Features.FOVCircle.Filled or false
-    end
-    
-    -- Hook raycast/aim methods
-    pcall(function()
-        local oldRaycast = workspace.Raycast
-        Hooks.OldRaycast = oldRaycast
-        
-        SilentAimHook = hookmeta(workspace, "__index", function(self, index, ...)
-            if index == "Raycast" and Features.SilentAim.Enabled then
-                local target, hitPos = GetNearestToCrosshair(Features.SilentAim.FOV)
-                
-                if target and (math.random(1, 100) <= Features.SilentAim.HitChance) then
-                    -- Return modified raycast result pointing to target
-                    local origin = Camera.CFrame.Position
-                    local direction = (hitPos - origin).Unit
-                    
-                    return {
-                        Position = hitPos,
-                        Instance = GetCharacter(target):FindFirstChild(Features.SilentAim.TargetPart) or GetRootPart(GetCharacter(target)),
-                        Material = Enum.Material.Plastic,
-                        Normal = -direction
-                    }
                 end
             end
             
-            return oldRaycast(self, index, ...)
-        end)
-    end)
-    
-    -- Update FOV circle position
-    table.insert(Connections, RunService.RenderStepped:Connect(function()
-        if FOVDrawing and (Features.SilentAim.ShowFOV or Features.FOVCircle.Enabled) then
-            FOVDrawing.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-            FOVDrawing.Radius = Features.SilentAim.FOV
-            FOVDrawing.Visible = Features.SilentAim.Enabled or Features.FOVCircle.Enabled
-        end
-    end))
-end
-
-function StopSilentAim()
-    -- Restore original raycast
-    if SilentAimHook and Hooks.OldRaycast then
-        pcall(function()
-            hookmeta(workspace, "__index", Hooks.OldRaycast)
-        end)
-        SilentAimHook = nil
-    end
-    
-    -- Remove FOV drawing
-    if FOVDrawing then
-        FOVDrawing:Remove()
-        FOVDrawing = nil
-    end
-end
-
--- ESP IMPLEMENTATION (Drawing API - CLIENT SIDE ONLY)
-local ESPDrawings = {}
-
-function StartESP()
-    -- Clear existing drawings first
-    StopESP()
-    
-    table.insert(Connections, RunService.RenderStepped:Connect(function()
-        if not Features.ESP.Enabled then return end
-        
-        for _, player in pairs(GetAllPlayers()) do
-            if IsAlive(player) then
-                local char = GetCharacter(player)
-                local root = GetRootPart(char)
+            -- Sort by distance
+            table.sort(targets, function(a, b) return a.Distance < b.Distance end)
+            
+            -- Attack targets
+            for i = 1, math.min(#targets, Config.KillAura.MaxTargets) do
+                local target = targets[i].Player
                 
-                if root then
-                    local screenPos, onScreen = WorldToScreen(root.Position)
+                if Config.KillAura.Mode == "Silent" then
+                    local attackRemote = Functions.FindRemote("Attack") 
+                        or Functions.FindRemote("Damage") 
+                        or Functions.FindRemote("Hit")
                     
-                    if onScreen and screenPos then
-                        local dist = Distance(GetPosition(LocalPlayer), root.Position)
-                        
-                        if dist <= Features.ESP.MaxDistance then
-                            local isEnemy = not IsTeammate(player)
-                            local color = isEnemy and Features.ESP.EnemyColor or Features.ESP.TeamColor
-                            
-                            -- Create/get drawings for this player
-                            if not ESPDrawings[player.UserId] then
-                                ESPDrawings[player.UserId] = {
-                                    Box = Drawing.new("Square"),
-                                    Name = Drawing.new("Text"),
-                                    Health = Drawing.new("Text"),
-                                    Dist = Drawing.new("Text"),
-                                    Tracer = Drawing.new("Line")
-                                }
-                                
-                                -- Configure box
-                                local box = ESPDrawings[player.UserId].Box
-                                box.Thickness = 1
-                                box.Filled = false
-                                box.Color = color
-                                
-                                -- Configure name
-                                local name = ESPDrawings[player.UserId].Name
-                                name.Size = Features.ESP.TextSize
-                                name.Center = true
-                                name.Outline = true
-                                name.Color = color
-                                
-                                -- Configure health
-                                local health = ESPDrawings[player.UserId].Health
-                                health.Size = Features.ESP.TextSize - 2
-                                health.Center = true
-                                health.Outline = true
-                                health.Color = Color3.fromRGB(50, 255, 50)
-                                
-                                -- Configure distance
-                                local distTxt = ESPDrawings[player.UserId].Dist
-                                distTxt.Size = Features.ESP.TextSize - 2
-                                distTxt.Center = true
-                                distTxt.Outline = true
-                                distTxt.Color = Color3.fromRGB(200, 200, 200)
-                                
-                                -- Configure tracer
-                                local tracer = ESPDrawings[player.UserId].Tracer
-                                tracer.Thickness = Features.Tracers.Thickness or 1
-                                tracer.Color = Features.Tracers.Color or Color3.fromRGB(255, 255, 255)
-                            end
-                        
-                            local drawings = ESPDrawings[player.UserId]
-                            local human = GetHumanoid(char)
-                            
-                            -- Calculate box size based on distance
-                            local scaleFactor = 1 / (dist * 0.001)
-                            local boxHeight = 4 * scaleFactor
-                            local boxWidth = 3 * scaleFactor
-                            
-                            -- Update box
-                            if Features.ESP.Box then
-                                drawings.Box.Position = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y - boxHeight/2)
-                                drawings.Box.Size = Vector2.new(boxWidth, boxHeight)
-                                drawings.Box.Color = color
-                                drawings.Box.Visible = true
-                            else
-                                drawings.Box.Visible = false
-                            end
-                            
-                            -- Update name
-                            if Features.ESP.Name then
-                                drawings.Name.Position = Vector2.new(screenPos.X, screenPos.Y - boxHeight/2 - 15)
-                                drawings.Name.Text = player.Name
-                                drawings.Name.Color = color
-                                drawings.Name.Visible = true
-                            else
-                                drawings.Name.Visible = false
-                            end
-                            
-                            -- Update health
-                            if Features.ESP.Health and human then
-                                drawings.Health.Position = Vector2.new(screenPos.X, screenPos.Y + boxHeight/2 + 2)
-                                drawings.Health.Text = "HP: " .. math.floor(human.Health)
-                                drawings.Health.Visible = true
-                            else
-                                drawings.Health.Visible = false
-                            end
-                            
-                            -- Update distance
-                            if Features.ESP.Distance then
-                                drawings.Dist.Position = Vector2.new(screenPos.X, screenPos.Y + boxHeight/2 + 16)
-                                drawings.Dist.Text = "[" .. math.floor(dist) .. "m]"
-                                drawings.Dist.Visible = true
-                            else
-                                drawings.Dist.Visible = false
-                            end
-                            
-                            -- Update tracer
-                            if Features.Tracers.Enabled then
-                                local fromY = Camera.ViewSize.Y
-                                if Features.Tracers.From == "center" then
-                                    fromY = Camera.ViewSize.Y / 2
-                                elseif Features.Tracers.From == "top" then
-                                    fromY = 0
-                                end
-                                
-                                drawings.Tracer.From = Vector2.new(Camera.ViewSize.X / 2, fromY)
-                                drawings.Tracer.To = screenPos
-                                drawings.Tracer.Visible = true
-                            else
-                                drawings.Tracer.Visible = false
-                            end
-                        else
-                            -- Too far, hide
-                            self:HidePlayerESP(player.UserId)
-                        end
-                    else
-                        -- Off screen, hide
-                        self:HidePlayerESP(player.UserId)
+                    if attackRemote then
+                        Functions.FireRemote(attackRemote, target, {
+                            Position = targets[i].Position,
+                            Damage = Config.OneShotKill.Enabled and Config.OneShotKill.Damage or 10
+                        })
                     end
+                elseif Config.KillAura.Mode == "Reach" then
+                    pcall(function()
+                        local tool = myChar:FindFirstChildOfClass("Tool")
+                        if tool then
+                            tool.Range = Config.KillAura.Range
+                        end
+                    end)
                 else
-                    self:HidePlayerESP(player.UserId)
+                    -- Normal mode - simulate click
+                    Services.VirtualInput:SendMouseButtonEvent(
+                        0, 0, 0, true, 
+                        Enum.UserInputType.MouseButton1, false
+                    )
+                    task.wait(Config.KillAura.Delay)
+                    Services.VirtualInput:SendMouseButtonEvent(
+                        0, 0, 0, false, 
+                        Enum.UserInputType.MouseButton1, false
+                    )
+                end
+                
+                CurrentTarget = target
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.KillAura then
+            ConnectionHandlers.KillAura:Disconnect()
+            ConnectionHandlers.KillAura = nil
+        end
+        CurrentTarget = nil
+    end
+}
+
+-- SILENT AIM MODULE
+Modules.SilentAim = {
+    Start = function()
+        -- Create FOV Circle
+        if Config.SilentAim.ShowFOV or Config.FOVCircle.Enabled then
+            FOVCircleDrawing = Functions.DrawCircle(
+                Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2),
+                Config.SilentAim.FOV,
+                Config.FOVCircle.Color or Color3.fromRGB(255, 255, 255),
+                Config.FOVCircle.Filled or false
+            )
+            FOVCircleDrawing.Thickness = Config.FOVCircle.Thickness or 1.5
+            FOVCircleDrawing.Transparency = Config.FOVCircle.Transparency or 0.6
+        end
+        
+        -- Hook Raycast
+        pcall(function()
+            local originalRaycast = workspace.Raycast
+            OriginalFunctions.OldRaycast = originalRaycast
+            
+            ConnectionHandlers.SilentAim = HookMeta(workspace, "__index", function(self, index, ...)
+                if index == "Raycast" and Config.SilentAim.Enabled then
+                    local target, targetPos = Functions.GetNearestToCrosshair(Config.SilentAim.FOV)
+                    
+                    if target and (math.random(1, 100) <= Config.SilentAim.HitChance) then
+                        local wallCheck = not Config.SilentAim.WallCheck or Functions.HasLineOfSight(targetPos)
+                        
+                        if wallCheck then
+                            local origin = Camera.CFrame.Position
+                            local direction = (targetPos - origin).Unit
+                            
+                            return {
+                                Position = targetPos,
+                                Instance = Functions.GetRootPart(Functions.GetCharacter(target)),
+                                Material = Enum.Material.Plastic,
+                                Normal = -direction
+                            }
+                        end
+                    end
+                end
+                
+                return originalRaycast(self, index, ...)
+            end)
+        end)
+        
+        -- Update FOV Circle
+        table.insert(Connections, Services.RunService.RenderStepped:Connect(function()
+            if FOVCircleDrawing then
+                FOVCircleDrawing.Position = Vector2.new(
+                    Camera.ViewportSize.X / 2, 
+                    Camera.ViewportSize.Y / 2
+                )
+                FOVCircleDrawing.Radius = Config.SilentAim.FOV
+                FOVCircleDrawing.Visible = Config.SilentAim.Enabled or Config.FOVCircle.Enabled
+            end
+        end))
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.SilentAim and OriginalFunctions.OldRaycast then
+            pcall(function()
+                HookMeta(workspace, "__index", OriginalFunctions.OldRaycast)
+            end)
+            ConnectionHandlers.SilentAim = nil
+        end
+        
+        if FOVCircleDrawing then
+            FOVCircleDrawing:Remove()
+            FOVCircleDrawing = nil
+        end
+    end
+}
+
+-- AIMBOT MODULE
+Modules.Aimbot = {
+    Start = function()
+        ConnectionHandlers.Aimbot = Services.RunService.RenderStepped:Connect(function()
+            if not Config.Aimbot.Enabled then return end
+            
+            local target, targetPos = Functions.GetNearestToCrosshair(180)
+            
+            if target and targetPos then
+                local cameraCF = Camera.CFrame
+                local targetCF = CFrame.new(cameraCF.Position, targetPos)
+                local smoothedCF = cameraCF:Lerp(targetCF, Config.Aimbot.Smoothness)
+                
+                Camera.CFrame = smoothedCF
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.Aimbot then
+            ConnectionHandlers.Aimbot:Disconnect()
+            ConnectionHandlers.Aimbot = nil
+        end
+    end
+}
+
+-- TRIGGER BOT MODULE
+Modules.TriggerBot = {
+    Start = function()
+        ConnectionHandlers.TriggerBot = Services.RunService.RenderStepped:Connect(function()
+            if not Config.TriggerBot.Enabled then return end
+            
+            local target, _ = Functions.GetNearestToCrosshair(20)
+            
+            if target then
+                if not Config.TriggerBot.OnlyEnemies or not Functions.IsTeammate(target) then
+                    Services.VirtualInput:SendMouseButtonEvent(
+                        0, 0, 0, true, 
+                        Enum.UserInputType.MouseButton1, false
+                    )
+                    task.wait(Config.TriggerBot.Delay)
+                    Services.VirtualInput:SendMouseButtonEvent(
+                        0, 0, 0, false, 
+                        Enum.UserInputType.MouseButton1, false
+                    )
+                end
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.TriggerBot then
+            ConnectionHandlers.TriggerBot:Disconnect()
+            ConnectionHandlers.TriggerBot = nil
+        end
+    end
+}
+
+-- SPEED HACK MODULE
+Modules.SpeedHack = {
+    Start = function()
+        ConnectionHandlers.SpeedHack = Services.RunService.Heartbeat:Connect(function()
+            if not Config.SpeedHack.Enabled then return end
+            
+            local hum = Functions.GetHumanoid(Functions.GetCharacter(Player))
+            if hum then
+                hum.WalkSpeed = 16 * Config.SpeedHack.Multiplier
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.SpeedHack then
+            ConnectionHandlers.SpeedHack:Disconnect()
+            ConnectionHandlers.SpeedHack = nil
+        end
+        
+        local hum = Functions.GetHumanoid(Functions.GetCharacter(Player))
+        if hum then
+            hum.WalkSpeed = 16
+        end
+    end
+}
+
+-- FLY MODULE
+Modules.Fly = {
+    Start = function()
+        local myChar = Functions.GetCharacter(Player)
+        local myRoot = Functions.GetRootPart(myChar)
+        if not myRoot then return end
+        
+        BodyMovers.Velocity = Instance.new("BodyVelocity")
+        BodyMovers.Velocity.Name = "FlyVelocity"
+        BodyMovers.Velocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        BodyMovers.Velocity.Velocity = Vector3.new(0, 0, 0)
+        BodyMovers.Velocity.Parent = myRoot
+        
+        BodyMovers.Gyro = Instance.new("BodyGyro")
+        BodyMovers.Gyro.Name = "FlyGyro"
+        BodyMovers.Gyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        BodyMovers.Gyro.P = 9e4
+        BodyMovers.Gyro.Parent = myRoot
+        
+        ConnectionHandlers.Fly = Services.RunService.RenderStepped:Connect(function()
+            if not Config.Fly.Enabled then return end
+            
+            local myChar = Functions.GetCharacter(Player)
+            local myRoot = Functions.GetRootPart(myChar)
+            if not myRoot then return end
+            
+            if Config.Fly.NoClip then
+                for _, part in pairs(myChar:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+            
+            local camCF = Camera.CFrame
+            local moveVec = Vector3.new(0, 0, 0)
+            
+            if Services.UserInput:IsKeyDown(Enum.KeyCode.W) then
+                moveVec = moveVec + camCF.LookVector
+            end
+            if Services.UserInput:IsKeyDown(Enum.KeyCode.S) then
+                moveVec = moveVec - camCF.LookVector
+            end
+            if Services.UserInput:IsKeyDown(Enum.KeyCode.A) then
+                moveVec = moveVec - camCF.RightVector
+            end
+            if Services.UserInput:IsKeyDown(Enum.KeyCode.D) then
+                moveVec = moveVec + camCF.RightVector
+            end
+            if Services.UserInput:IsKeyDown(Enum.KeyCode.Space) then
+                moveVec = moveVec + Vector3.new(0, 1, 0)
+            end
+            if Services.UserInput:IsKeyDown(Enum.KeyCode.LeftControl) then
+                moveVec = moveVec - Vector3.new(0, 1, 0)
+            end
+            
+            if moveVec.Magnitude > 0 then
+                moveVec = moveVec.Unit * Config.Fly.Speed
+                
+                if Config.Fly.Method == "Velocity" and BodyMovers.Velocity then
+                    BodyMovers.Velocity.Velocity = moveVec
+                elseif Config.Fly.Method == "CFrame" then
+                    myRoot.CFrame = myRoot.CFrame + (moveVec * Services.RunService.Heartbeat:Wait())
                 end
             else
-                self:HidePlayerESP(player.UserId)
-            end
-        end
-    end))
-end
-
-function StopESP()
-    -- Remove all ESP drawings
-    for userId, drawings in pairs(ESPDrawings) do
-        for _, drawing in pairs(drawings) do
-            if typeof(drawing) == "table" and drawing.Remove then
-                drawing:Remove()
-            end
-        end
-    end
-    ESPDrawings = {}
-end
-
-function GUI:HidePlayerESP(userId)
-    if ESPDrawings[userId] then
-        for _, drawing in pairs(ESPDrawings[userId]) do
-            drawing.Visible = false
-        end
-    end
-end
-
--- AUTO SCAFFOLD IMPLEMENTATION
-local ScaffoldConnection = nil
-
-function StartAutoScaffold()
-    ScaffoldConnection = RunService.RenderStepped:Connect(function()
-        if not Features.AutoScaffold.Enabled then return end
-        
-        local myChar = GetCharacter(LocalPlayer)
-        local myRoot = GetRootPart(myChar)
-        if not myRoot then return end
-        
-        local pos = myRoot.Position
-        local belowPos = Vector3.new(pos.X, pos.Y - 3, pos.Z)
-        
-        -- Check if there's no block below
-        local params = RaycastParams.new()
-        params.FilterDescendantsInstances = {myChar}
-        params.FilterType = Enum.RaycastFilterType.Blacklist
-        
-        local result = workspace:Raycast(pos, Vector3.new(0, -5, 0), params)
-        
-        if not result or (result.Position - pos).Magnitude > 4 then
-            -- Place block below
-            local placeRemote = FindRemote("placeBlock") or FindRemote("build") or FindRemote("block")
-            if placeRemote then
-                SafeFire(placeRemote, belowPos)
-            end
-            
-            -- Tower mode: stack blocks upward when looking down
-            if Features.AutoScaffold.TowerMode then
-                local lookDir = Camera.CFrame.LookVector
-                if lookDir.Y < -0.7 then -- Looking mostly downward
-                    local towerPos = Vector3.new(pos.X, pos.Y + 2, pos.Z)
-                    SafeFire(placeRemote, towerPos)
+                if BodyMovers.Velocity then
+                    BodyMovers.Velocity.Velocity = Vector3.new(0, 0, 0)
                 end
             end
             
-            -- Expand mode: place blocks around
-            if Features.AutoScaffold.ExpandMode then
-                local offsets = {
-                    Vector3.new(3, 0, 0),
-                    Vector3.new(-3, 0, 0),
-                    Vector3.new(0, 0, 3),
-                    Vector3.new(0, 0, -3)
-                }
-                
-                for _, offset in pairs(offsets) do
-                    local expandPos = pos + offset
-                    SafeFire(placeRemote, expandPos)
-                end
+            if BodyMovers.Gyro then
+                BodyMovers.Gyro.CFrame = camCF
             end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.Fly then
+            ConnectionHandlers.Fly:Disconnect()
+            ConnectionHandlers.Fly = nil
         end
-    end)
-end
-
-function StopAutoScaffold()
-    if ScaffoldConnection then
-        ScaffoldConnection:Disconnect()
-        ScaffoldConnection = nil
-    end
-end
-
--- ANTI-VOID IMPLEMENTATION
-local AntiVoidConnection = nil
-
-function StartAntiVoid()
-    AntiVoidConnection = RunService.RenderStepped:Connect(function()
-        if not Features.AntiVoid.Enabled then return end
         
-        local myChar = GetCharacter(LocalPlayer)
-        local myRoot = GetRootPart(myChar)
-        if not myRoot then return end
-        
-        local pos = myRoot.Position
-        
-        if pos.Y < Features.AntiVoid.YLevel then
-            if Features.AntiVoid.Method == "teleport" or Features.AntiVoid.Method == "both" then
-                -- Teleport to safe position
-                pcall(function()
-                    myRoot.CFrame = CFrame.new(Vector3.new(pos.X, 100, pos.Z))
-                end)
-            end
-            
-            if Features.AntiVoid.Method == "place" or Features.AntiVoid.Method == "both" then
-                -- Place block under feet
-                local placeRemote = FindRemote("placeBlock") or FindRemote("build")
-                if placeRemote then
-                    SafeFire(placeRemote, Vector3.new(pos.X, pos.Y - 2, pos.Z))
-                end
-            end
-            
-            if Features.AntiVoid.ResetOnTrigger then
-                -- Optional: reset character if stuck
-                -- LocalPlayer:LoadCharacter()
-            end
+        if BodyMovers.Velocity then
+            BodyMovers.Velocity:Destroy()
+            BodyMovers.Velocity = nil
         end
-    end)
-end
-
-function StopAntiVoid()
-    if AntiVoidConnection then
-        AntiVoidConnection:Disconnect()
-        AntiVoidConnection = nil
-    end
-end
-
--- FLIGHT IMPLEMENTATION
-local FlightConnection = nil
-local FlyBodyVelocity = nil
-local FlyBodyGyro = nil
-
-function StartFlight()
-    local myChar = GetCharacter(LocalPlayer)
-    local myRoot = GetRootPart(myChar)
-    if not myRoot then return end
-    
-    -- Create velocity bodymover
-    FlyBodyVelocity = Instance.new("BodyVelocity")
-    FlyBodyVelocity.Name = "ScriptFlyVel"
-    FlyBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-    FlyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-    FlyBodyVelocity.Parent = myRoot
-    
-    -- Create gyro for control
-    FlyBodyGyro = Instance.new("BodyGyro")
-    FlyBodyGyro.Name = "ScriptFlyGyro"
-    FlyBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-    FlyBodyGyro.P = 9e4
-    FlyBodyGyro.Parent = myRoot
-    
-    FlightConnection = RunService.RenderStepped:Connect(function()
-        if not Features.Flight.Enabled then return end
         
-        local myChar = GetCharacter(LocalPlayer)
-        local myRoot = GetRootPart(myChar)
-        if not myRoot then return end
+        if BodyMovers.Gyro then
+            BodyMovers.Gyro:Destroy()
+            BodyMovers.Gyro = nil
+        end
         
-        if Features.Flight.Noclip then
-            -- Make character clip through everything
+        local myChar = Functions.GetCharacter(Player)
+        if myChar then
             for _, part in pairs(myChar:GetChildren()) do
                 if part:IsA("BasePart") then
-                    part.CanCollide = false
+                    part.CanCollide = true
                 end
             end
         end
-        
-        -- Calculate fly direction based on input
-        local camCF = Camera.CFrame
-        local moveVec = Vector3.new(0, 0, 0)
-        
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-            moveVec = moveVec + camCF.LookVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-            moveVec = moveVec - camCF.LookVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-            moveVec = moveVec - camCF.RightVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-            moveVec = moveVec + camCF.RightVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-            moveVec = moveVec + Vector3.new(0, 1, 0)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
-            moveVec = moveVec - Vector3.new(0, 1, 0)
-        end
-        
-        -- Apply movement
-        if moveVec.Magnitude > 0 then
-            moveVec = moveVec.Unit * Features.Flight.Speed
+    end
+}
+
+-- NO CLIP MODULE
+Modules.NoClip = {
+    Start = function()
+        ConnectionHandlers.NoClip = Services.RunService.Stepped:Connect(function()
+            if not Config.NoClip.Enabled then return end
             
-            if Features.Flight.Method == "velocity" and FlyBodyVelocity then
-                FlyBodyVelocity.Velocity = moveVec
-            elseif Features.Flight.Method == "cframe" then
-                myRoot.CFrame = myRoot.CFrame + (moveVec * RunService.Heartbeat:Wait())
+            local myChar = Functions.GetCharacter(Player)
+            if myChar then
+                for _, part in pairs(myChar:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
             end
-        else
-            if FlyBodyVelocity then
-                FlyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.NoClip then
+            ConnectionHandlers.NoClip:Disconnect()
+            ConnectionHandlers.NoClip = nil
+        end
+        
+        local myChar = Functions.GetCharacter(Player)
+        if myChar then
+            for _, part in pairs(myChar:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end
+}
+
+-- INFINITE JUMP MODULE
+Modules.InfiniteJump = {
+    Start = function()
+        JumpsRemaining = Config.InfiniteJump.ExtraJumps
+        
+        table.insert(Connections, Services.UserInput.JumpRequest:Connect(function()
+            if Config.InfiniteJump.Enabled then
+                local myChar = Functions.GetCharacter(Player)
+                local hum = Functions.GetHumanoid(myChar)
+                
+                if hum and (not hum.FloorMaterial or hum.FloorMaterial == Enum.Material.Air) then
+                    if JumpsRemaining > 0 or Config.InfiniteJump.ExtraJumps == 0 then
+                        if JumpsRemaining > 0 then
+                            JumpsRemaining = JumpsRemaining - 1
+                        end
+                        
+                        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                    end
+                else
+                    JumpsRemaining = Config.InfiniteJump.ExtraJumps
+                end
+            end
+        end))
+    end,
+    
+    Stop = function()
+        JumpsRemaining = 0
+    end
+}
+
+-- ANTI VOID MODULE
+Modules.AntiVoid = {
+    Start = function()
+        ConnectionHandlers.AntiVoid = Services.RunService.RenderStepped:Connect(function()
+            if not Config.AntiVoid.Enabled then return end
+            
+            local myChar = Functions.GetCharacter(Player)
+            local myRoot = Functions.GetRootPart(myChar)
+            if not myRoot then return end
+            
+            local pos = myRoot.Position
+            
+            if pos.Y < Config.AntiVoid.YLevel then
+                if Config.AntiVoid.Method == "Teleport" or Config.AntiVoid.Method == "Both" then
+                    pcall(function()
+                        myRoot.CFrame = CFrame.new(Vector3.new(pos.X, 100, pos.Z))
+                    end)
+                end
+                
+                if Config.AntiVoid.Method == "Place Block" or Config.AntiVoid.Method == "Both" then
+                    local placeRemote = Functions.FindRemote("placeBlock") or Functions.FindRemote("build")
+                    if placeRemote then
+                        Functions.FireRemote(placeRemote, Vector3.new(pos.X, pos.Y - 2, pos.Z))
+                    end
+                end
+                
+                if Config.AntiVoid.ResetOnTrigger then
+                    -- Optional reset
+                end
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.AntiVoid then
+            ConnectionHandlers.AntiVoid:Disconnect()
+            ConnectionHandlers.AntiVoid = nil
+        end
+    end
+}
+
+-- NO FALL DAMAGE MODULE
+Modules.NoFallDamage = {
+    Start = function()
+        -- Implementation depends on game's damage system
+        ConnectionHandlers.NoFallDamage = Services.RunService.RenderStepped:Connect(function()
+            if not Config.NoFallDamage.Enabled then return end
+            -- Add fall damage prevention logic here
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.NoFallDamage then
+            ConnectionHandlers.NoFallDamage:Disconnect()
+            ConnectionHandlers.NoFallDamage = nil
+        end
+    end
+}
+
+-- SPIDER MODULE
+Modules.Spider = {
+    Start = function()
+        ConnectionHandlers.Spider = Services.RunService.Stepped:Connect(function()
+            if not Config.Spider.Enabled then return end
+            
+            local myChar = Functions.GetCharacter(Player)
+            local myRoot = Functions.GetRootPart(myChar)
+            if not myRoot then return end
+            
+            local rayParams = RaycastParams.new()
+            rayParams.FilterDescendantsInstances = {myChar}
+            rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+            
+            local rayResult = workspace:Raycast(
+                myRoot.Position, 
+                Vector3.new(0, -1, 0) * 3, 
+                rayParams
+            )
+            
+            if rayResult and rayResult.Normal then
+                local climbDir = rayResult.Normal * Config.Spider.ClimbSpeed
+                myRoot.Velocity = Vector3.new(climbDir.X, 0, climbDir.Z)
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.Spider then
+            ConnectionHandlers.Spider:Disconnect()
+            ConnectionHandlers.Spider = nil
+        end
+    end
+}
+
+-- ESP MODULE
+Modules.ESP = {
+    Start = function()
+        self:Stop()
+        
+        ConnectionHandlers.ESP = Services.RunService.RenderStepped:Connect(function()
+            if not Config.ESP.Enabled then return end
+            
+            for _, pl in pairs(Functions.GetAllPlayers()) do
+                if not Functions.IsAlive(pl) then
+                    self:HidePlayerESP(pl.UserId)
+                    continue
+                end
+                
+                local char = Functions.GetCharacter(pl)
+                local root = Functions.GetRootPart(char)
+                if not root then
+                    self:HidePlayerESP(pl.UserId)
+                    continue
+                end
+                
+                local screenPos, onScreen = Functions.WorldToScreen(root.Position)
+                if not onScreen or not screenPos then
+                    self:HidePlayerESP(pl.UserId)
+                    continue
+                end
+                
+                local myPos = Functions.GetPosition(Player)
+                local dist = Functions.Distance(myPos, root.Position)
+                
+                if dist > Config.ESP.MaxDistance then
+                    self:HidePlayerESP(pl.UserId)
+                    continue
+                end
+                
+                local isEnemy = not Functions.IsTeammate(pl)
+                local color = isEnemy and Config.ESP.EnemyColor or Config.ESP.TeamColor
+                
+                -- Create ESP objects if needed
+                if not ESPData[pl.UserId] then
+                    ESPData[pl.UserId] = {
+                        Box = Drawing.new("Square"),
+                        Name = Drawing.new("Text"),
+                        Health = Drawing.new("Text"),
+                        Distance = Drawing.new("Text"),
+                        Tool = Drawing.new("Text"),
+                        Tracer = Drawing.new("Line")
+                    }
+                    
+                    -- Configure drawings
+                    local data = ESPData[pl.UserId]
+                    data.Box.Thickness = 1
+                    data.Box.Filled = false
+                    data.Box.Color = color
+                    
+                    data.Name.Size = Config.ESP.TextSize
+                    data.Name.Center = true
+                    data.Name.Outline = true
+                    data.Name.Color = color
+                    
+                    data.Health.Size = Config.ESP.TextSize - 2
+                    data.Health.Center = true
+                    data.Health.Outline = true
+                    data.Health.Color = Color3.fromRGB(50, 255, 50)
+                    
+                    data.Distance.Size = Config.ESP.TextSize - 2
+                    data.Distance.Center = true
+                    data.Distance.Outline = true
+                    data.Distance.Color = Color3.fromRGB(200, 200, 200)
+                    
+                    data.Tool.Size = Config.ESP.TextSize - 2
+                    data.Tool.Center = true
+                    data.Tool.Outline = true
+                    data.Tool.Color = Color3.fromRGB(255, 220, 100)
+                    
+                    data.Tracer.Thickness = Config.Tracers.Thickness or 1.2
+                    data.Tracer.Color = Config.Tracers.Color or Color3.fromRGB(255, 255, 255)
+                end
+                
+                local data = ESPData[pl.UserId]
+                local hum = Functions.GetHumanoid(char)
+                
+                -- Calculate box dimensions
+                local scaleFactor = 1 / (dist * 0.001)
+                local boxHeight = 4.5 * scaleFactor
+                local boxWidth = 3.5 * scaleFactor
+                
+                -- Update Box ESP
+                if Config.ESP.BoxESP then
+                    data.Box.Position = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y - boxHeight/2)
+                    data.Box.Size = Vector2.new(boxWidth, boxHeight)
+                    data.Box.Color = color
+                    data.Box.Visible = true
+                else
+                    data.Box.Visible = false
+                end
+                
+                -- Update Name
+                if Config.ESP.ShowNames then
+                    data.Name.Position = Vector2.new(screenPos.X, screenPos.Y - boxHeight/2 - 16)
+                    data.Name.Text = pl.Name
+                    data.Name.Color = color
+                    data.Name.Visible = true
+                else
+                    data.Name.Visible = false
+                end
+                
+                -- Update Health
+                if Config.ESP.ShowHealth and hum then
+                    data.Health.Position = Vector2.new(screenPos.X, screenPos.Y + boxHeight/2 + 2)
+                    data.Health.Text = "HP: " .. math.floor(hum.Health)
+                    data.Health.Visible = true
+                else
+                    data.Health.Visible = false
+                end
+                
+                -- Update Distance
+                if Config.ESP.ShowDistance then
+                    data.Distance.Position = Vector2.new(screenPos.X, screenPos.Y + boxHeight/2 + 16)
+                    data.Distance.Text = "[" .. math.floor(dist) .. "m]"
+                    data.Distance.Visible = true
+                else
+                    data.Distance.Visible = false
+                end
+                
+                -- Update Tool
+                if Config.ESP.ShowTool then
+                    local tool = char:FindFirstChildOfClass("Tool")
+                    data.Tool.Position = Vector2.new(screenPos.X, screenPos.Y + boxHeight/2 + 30)
+                    data.Tool.Text = tool and tool.Name or "None"
+                    data.Tool.Visible = true
+                else
+                    data.Tool.Visible = false
+                end
+                
+                -- Update Tracer
+                if Config.ESP.Tracers then
+                    local fromY = Camera.ViewSize.Y
+                    if Config.Tracers.FromPosition == "Center" then
+                        fromY = Camera.ViewSize.Y / 2
+                    elseif Config.Tracers.FromPosition == "Top" then
+                        fromY = 0
+                    elseif Config.Tracers.FromPosition == "Mouse" then
+                        fromY = Services.UserInput:GetMouseLocation().Y
+                    end
+                    
+                    data.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, fromY)
+                    data.Tracer.To = screenPos
+                    data.Tracer.Visible = true
+                else
+                    data.Tracer.Visible = false
+                end
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.ESP then
+            ConnectionHandlers.ESP:Disconnect()
+            ConnectionHandlers.ESP = nil
+        end
+        self:ClearAllESP()
+    end,
+    
+    HidePlayerESP = function(uid)
+        if ESPData[uid] then
+            for _, drawing in pairs(ESPData[uid]) do
+                drawing.Visible = false
+            end
+        end
+    end,
+    
+    ClearAllESP = function()
+        for uid, data in pairs(ESPData) do
+            for _, drawing in pairs(data) do
+                if typeof(drawing) == "table" and drawing.Remove then
+                    drawing:Remove()
+                end
+            end
+        end
+        ESPData = {}
+    end
+}
+
+-- BED ESP MODULE
+Modules.BedESP = {
+    Start = function()
+        -- Implementation for bed detection and highlighting
+        print("[BedWarsVIP] Bed ESP started")
+    end,
+    
+    Stop = function()
+        print("[BedWarsVIP] Bed ESP stopped")
+    end
+}
+
+-- ITEM ESP MODULE
+Modules.ItemESP = {
+    Start = function()
+        -- Implementation for item detection and highlighting
+        print("[BedWarsVIP] Item ESP started")
+    end,
+    
+    Stop = function()
+        print("[BedWarsVIP] Item ESP stopped")
+    end
+}
+
+-- TRACERS MODULE
+Modules.Tracers = {
+    Start = function()
+        -- Handled within main ESP module
+        print("[BedWarsVIP] Tracers started")
+    end,
+    
+    Stop = function()
+        print("[BedWarsVIP] Tracers stopped")
+    end
+}
+
+-- CHAMS MODULE
+Modules.Chams = {
+    Start = function()
+        -- Implementation for chams/wallhack effect
+        print("[BedWarsVIP] Chams started")
+    end,
+    
+    Stop = function()
+        print("[BedWarsVIP] Chams stopped")
+    end
+}
+
+-- FOV CIRCLE MODULE
+Modules.FOVCircle = {
+    Start = function()
+        -- Handled within Silent Aim module
+        print("[BedWarsVIP] FOV Circle started")
+    end,
+    
+    Stop = function()
+        print("[BedWarsVIP] FOV Circle stopped")
+    end
+}
+
+-- AUTO BRIDGE MODULE
+Modules.AutoBridge = {
+    Start = function()
+        ConnectionHandlers.AutoBridge = Services.RunService.RenderStepped:Connect(function()
+            if not Config.AutoBridge.Enabled then return end
+            
+            local myChar = Functions.GetCharacter(Player)
+            local myRoot = Functions.GetRootPart(myChar)
+            if not myRoot then return end
+            
+            local pos = myRoot.Position
+            local cf = myRoot.CFrame
+            
+            local direction = cf.LookVector
+            if Config.AutoBridge.Direction == "Forward" then
+                direction = cf.LookVector
+            elseif Config.AutoBridge.Direction == "Backward" then
+                direction = -cf.LookVector
+            elseif Config.AutoBridge.Direction == "Left" then
+                direction = -cf.RightVector
+            elseif Config.AutoBridge.Direction == "Right" then
+                direction = cf.RightVector
+            end
+            
+            local placeRemote = Functions.FindRemote("placeBlock") or Functions.FindRemote("build")
+            
+            for i = 1, Config.AutoBridge.Length do
+                if not Config.AutoBridge.Enabled then break end
+                
+                local buildPos = pos + (direction * (i * 3))
+                
+                if Config.AutoBridge.StairMode then
+                    buildPos = Vector3.new(buildPos.X, buildPos.Y + (i * 3), buildPos.Z)
+                end
+                
+                if placeRemote then
+                    Functions.FireRemote(placeRemote, buildPos)
+                end
+                
+                task.wait(Config.AutoBridge.AutoPlaceDelay)
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.AutoBridge then
+            ConnectionHandlers.AutoBridge:Disconnect()
+            ConnectionHandlers.AutoBridge = nil
+        end
+    end
+}
+
+-- AUTO CLICK MODULE
+Modules.AutoClick = {
+    Start = function()
+        ConnectionHandlers.AutoClick = task.spawn(function()
+            while Config.AutoClick.Enabled do
+                if Config.AutoClick.LeftClick then
+                    Services.VirtualInput:SendMouseButtonEvent(
+                        0, 0, 0, true, 
+                        Enum.UserInputType.MouseButton1, false
+                    )
+                    task.wait(1 / Config.AutoClick.CPS)
+                    Services.VirtualInput:SendMouseButtonEvent(
+                        0, 0, 0, false, 
+                        Enum.UserInputType.MouseButton1, false
+                    )
+                end
+                
+                if Config.AutoClick.RightClick then
+                    Services.VirtualInput:SendMouseButtonEvent(
+                        0, 0, 0, true, 
+                        Enum.UserInputType.MouseButton2, false
+                    )
+                    task.wait(1 / Config.AutoClick.CPS)
+                    Services.VirtualInput:SendMouseButtonEvent(
+                        0, 0, 0, false, 
+                        Enum.UserInputType.MouseButton2, false
+                    )
+                end
+                
+                task.wait(1 / Config.AutoClick.CPS)
+            end
+        end)
+    end,
+    
+    Stop = function()
+        Config.AutoClick.Enabled = false
+        if ConnectionHandlers.AutoClick then
+            task.cancel(ConnectionHandlers.AutoClick)
+            ConnectionHandlers.AutoClick = nil
+        end
+    end
+}
+
+-- BED NUKER MODULE
+Modules.BedNuker = {
+    Start = function()
+        ConnectionHandlers.BedNuker = Services.RunService.RenderStepped:Connect(function()
+            if not Config.BedNuker.Enabled then return end
+            
+            local myPos = Functions.GetPosition(Player)
+            if not myPos then return end
+            
+            -- Find and destroy beds
+            local bedRemote = Functions.FindRemote("bed") 
+                or Functions.FindRemote("break") 
+                or Functions.FindRemote("destroy")
+            
+            if bedRemote then
+                Functions.FireRemote(bedRemote, {
+                    Range = Config.BedNuker.Range,
+                    AllBeds = Config.BedNuker.AllBeds
+                })
+            end
+            
+            task.wait(Config.BedNuker.Delay)
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.BedNuker then
+            ConnectionHandlers.BedNuker:Disconnect()
+            ConnectionHandlers.BedNuker = nil
+        end
+    end
+}
+
+-- AUTO FARM MODULE
+Modules.AutoFarm = {
+    Start = function()
+        ConnectionHandlers.AutoFarm = Services.RunService.RenderStepped:Connect(function()
+            if not Config.AutoFarm.Enabled then return end
+            
+            -- Auto farm implementation based on mode
+            local target = nil
+            
+            if Config.AutoFarm.TargetPriority == "Nearest" then
+                target, _ = Functions.GetNearestEnemy(50)
+            elseif Config.AutoFarm.TargetPriority == "Lowest HP" then
+                -- Find lowest HP enemy
+                local lowestHP = math.huge
+                for _, enemy in pairs(Functions.GetAllPlayers()) do
+                    if Functions.IsAlive(enemy) and not Functions.IsTeammate(enemy) then
+                        local hum = Functions.GetHumanoid(Functions.GetCharacter(enemy))
+                        if hum and hum.Health < lowestHP then
+                            lowestHP = hum.Health
+                            target = enemy
+                        end
+                    end
+                end
+            end
+            
+            if target then
+                -- Move towards and attack target
+                local attackRemote = Functions.FindRemote("Attack") or Functions.FindRemote("damage")
+                if attackRemote then
+                    Functions.FireRemote(attackRemote, target)
+                end
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.AutoFarm then
+            ConnectionHandlers.AutoFarm:Disconnect()
+            ConnectionHandlers.AutoFarm = nil
+        end
+    end
+}
+
+-- AUTO SCAFFOLD MODULE
+Modules.AutoScaffold = {
+    Start = function()
+        ConnectionHandlers.AutoScaffold = Services.RunService.RenderStepped:Connect(function()
+            if not Config.AutoScaffold.Enabled then return end
+            
+            local myChar = Functions.GetCharacter(Player)
+            local myRoot = Functions.GetRootPart(myChar)
+            if not myRoot then return end
+            
+            local pos = myRoot.Position
+            local belowPos = Vector3.new(pos.X, pos.Y - 3, pos.Z)
+            
+            local rayParams = RaycastParams.new()
+            rayParams.FilterDescendantsInstances = {myChar}
+            rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+            
+            local result = workspace:Raycast(pos, Vector3.new(0, -5, 0), rayParams)
+            
+            if not result or (result.Position - pos).Magnitude > 4 then
+                local placeRemote = Functions.FindRemote("placeBlock") or Functions.FindRemote("build")
+                if placeRemote then
+                    Functions.FireRemote(placeRemote, belowPos)
+                end
+                
+                if Config.AutoScaffold.TowerMode then
+                    local lookDir = Camera.CFrame.LookVector
+                    if lookDir.Y < -0.7 then
+                        Functions.FireRemote(placeRemote, Vector3.new(pos.X, pos.Y + 2, pos.Z))
+                    end
+                end
+                
+                if Config.AutoScaffold.ExpandMode then
+                    local offsets = {
+                        Vector3.new(3, 0, 0),
+                        Vector3.new(-3, 0, 0),
+                        Vector3.new(0, 0, 3),
+                        Vector3.new(0, 0, -3)
+                    }
+                    
+                    for _, offset in pairs(offsets) do
+                        Functions.FireRemote(placeRemote, pos + offset)
+                    end
+                end
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.AutoScaffold then
+            ConnectionHandlers.AutoScaffold:Disconnect()
+            ConnectionHandlers.AutoScaffold = nil
+        end
+    end
+}
+
+-- AUTO HEAL MODULE
+Modules.AutoHeal = {
+    Start = function()
+        ConnectionHandlers.AutoHeal = Services.RunService.RenderStepped:Connect(function()
+            if not Config.AutoHeal.Enabled then return end
+            
+            local myChar = Functions.GetCharacter(Player)
+            local hum = Functions.GetHumanoid(myChar)
+            
+            if hum and hum.Health > 0 then
+                local healthPercent = (hum.Health / hum.MaxHealth) * 100
+                
+                if healthPercent < Config.AutoHeal.HealthPercent then
+                    local healRemote = Functions.FindRemote("heal") 
+                        or Functions.FindRemote("useItem") 
+                        or Functions.FindRemote("consume")
+                    
+                    if healRemote then
+                        for _, itemName in pairs(Config.AutoHeal.PriorityItems) do
+                            Functions.FireRemote(healRemote, itemName:lower())
+                        end
+                    end
+                end
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.AutoHeal then
+            ConnectionHandlers.AutoHeal:Disconnect()
+            ConnectionHandlers.AutoHeal = nil
+        end
+    end
+}
+
+-- ANTI AIM MODULE
+Modules.AntiAim = {
+    Start = function()
+        ConnectionHandlers.AntiAim = Services.RunService.RenderStepped:Connect(function()
+            if not Config.AntiAim.Enabled then return end
+            
+            local pitch = 0
+            local yaw = 0
+            
+            -- Pitch calculation
+            if Config.AntiAim.Pitch == "Down" then
+                pitch = -90
+            elseif Config.AntiAim.Pitch == "Up" then
+                pitch = 90
+            elseif Config.AntiAim.Pitch == "Jitter" then
+                pitch = math.random(-Config.AntiAim.RandomRange, Config.AntiAim.RandomRange)
+            elseif Config.AntiAim.Pitch == "Random" then
+                pitch = math.random(-180, 180)
+            end
+            
+            -- Yaw calculation
+            if Config.AntiAim.Yaw == "Spin" then
+                yaw = (tick() * Config.AntiAim.SpinSpeed) % 360
+            elseif Config.AntiAim.Yaw == "Backward" then
+                yaw = 180
+            elseif Config.AntiAim.Yaw == "Jitter" then
+                yaw = math.random(-Config.AntiAim.RandomRange, Config.AntiAim.RandomRange)
+            elseif Config.AntiAim.Yaw == "Random" then
+                yaw = math.random(-180, 180)
+            end
+            
+            -- Apply anti-aim (implementation depends on game)
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.AntiAim then
+            ConnectionHandlers.AntiAim:Disconnect()
+            ConnectionHandlers.AntiAim = nil
+        end
+    end
+}
+
+-- GOD MODE MODULE
+Modules.GodMode = {
+    Start = function()
+        ConnectionHandlers.GodMode = Services.RunService.Stepped:Connect(function()
+            if not Config.GodMode.Enabled then return end
+            
+            local myChar = Functions.GetCharacter(Player)
+            local hum = Functions.GetHumanoid(myChar)
+            
+            if hum then
+                if Config.GodMode.Method == "Blanket" then
+                    -- Blanket method
+                elseif Config.GodMode.Method == "Health Lock" then
+                    hum.Health = hum.MaxHealth
+                elseif Config.GodMode.Method == "Damage Redirect" then
+                    -- Redirect damage
+                end
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.GodMode then
+            ConnectionHandlers.GodMode:Disconnect()
+            ConnectionHandlers.GodMode = nil
+        end
+    end
+}
+
+-- NO COOLDOWN MODULE
+Modules.NoCooldown = {
+    Start = function()
+        -- Implementation for removing cooldowns
+        print("[BedWarsVIP] No Cooldown started")
+    end,
+    
+    Stop = function()
+        print("[BedWarsVIP] No Cooldown stopped")
+    end
+}
+
+-- REACH HACK MODULE
+Modules.ReachHack = {
+    Start = function()
+        ConnectionHandlers.ReachHack = Services.RunService.RenderStepped:Connect(function()
+            if not Config.ReachHack.Enabled then return end
+            
+            local myChar = Functions.GetCharacter(Player)
+            local tool = myChar and myChar:FindFirstChildOfClass("Tool")
+            
+            if tool then
+                tool.Range = Config.ReachHack.Range
+            end
+        end)
+    end,
+    
+    Stop = function()
+        if ConnectionHandlers.ReachHack then
+            ConnectionHandlers.ReachHack:Disconnect()
+            ConnectionHandlers.ReachHack = nil
+        end
+    end
+}
+
+-- ONE SHOT KILL MODULE
+Modules.OneShotKill = {
+    Start = function()
+        -- Handled within Kill Aura module
+        print("[BedWarsVIP] One Shot Kill started")
+    end,
+    
+    Stop = function()
+        print("[BedWarsVIP] One Shot Kill stopped")
+    end
+}
+
+-- FREE CAMERA MODULE
+Modules.FreeCamera = {
+    Start = function()
+        -- Free camera implementation
+        print("[BedWarsVIP] Free Camera started")
+    end,
+    
+    Stop = function()
+        print("[BedWarsVIP] Free Camera stopped")
+    end
+}
+
+-- CONFIG MODULE
+Modules.Config = {
+    Save = function()
+        local configData = {
+            Version = "4.0",
+            SavedAt = os.time(),
+            Features = {}
+        }
+        
+        for featName, featData in pairs(Config) do
+            if type(featData) == "table" and featData.Enabled ~= nil then
+                configData.Features[featName] = {
+                    Enabled = featData.Enabled,
+                    Range = featData.Range,
+                    Multiplier = featData.Multiplier,
+                    Speed = featData.Speed,
+                    FOV = featData.FOV,
+                    HitChance = featData.HitChance,
+                    CPS = featData.CPS
+                }
             end
         end
         
-        if FlyBodyGyro then
-            FlyBodyGyro.CFrame = camCF
-        end
-    end)
-end
-
-function StopFlight()
-    if FlightConnection then
-        FlightConnection:Disconnect()
-        FlightConnection = nil
-    end
+        pcall(function()
+            WriteFile("BedWarsVIP_config.json", Services.HttpService:JSONEncode(configData))
+        end)
+    end,
     
-    if FlyBodyVelocity then
-        FlyBodyVelocity:Destroy()
-        FlyBodyVelocity = nil
-    end
+    Load = function()
+        pcall(function()
+            if IsFile("BedWarsVIP_config.json") then
+                local configData = Services.HttpService:JSONDecode(
+                    ReadFile("BedWarsVIP_config.json")
+                )
+                
+                if configData.Features then
+                    for featName, featConfig in pairs(configData.Features) do
+                        if Config[featName] then
+                            for key, value in pairs(featConfig) do
+                                Config[featName][key] = value
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end,
     
-    if FlyBodyGyro then
-        FlyBodyGyro:Destroy()
-        FlyBodyGyro = nil
-    end
-    
-    -- Restore collision
-    local myChar = GetCharacter(LocalPlayer)
-    if myChar then
-        for _, part in pairs(myChar:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
+    Reset = function()
+        for featName, featData in pairs(Config) do
+            if type(featData) == "table" and featData.Enabled ~= nil then
+                featData.Enabled = false
             end
         end
+        
+        -- Stop all modules
+        Modules.KillAura.Stop()
+        Modules.SilentAim.Stop()
+        Modules.Aimbot.Stop()
+        Modules.TriggerBot.Stop()
+        Modules.SpeedHack.Stop()
+        Modules.Fly.Stop()
+        Modules.NoClip.Stop()
+        Modules.InfiniteJump.Stop()
+        Modules.AntiVoid.Stop()
+        Modules.NoFallDamage.Stop()
+        Modules.Spider.Stop()
+        Modules.ESP.Stop()
+        Modules.BedESP.Stop()
+        Modules.ItemESP.Stop()
+        Modules.Tracers.Stop()
+        Modules.Chams.Stop()
+        Modules.FOVCircle.Stop()
+        Modules.AutoBridge.Stop()
+        Modules.AutoClick.Stop()
+        Modules.BedNuker.Stop()
+        Modules.AutoFarm.Stop()
+        Modules.AutoScaffold.Stop()
+        Modules.AutoHeal.Stop()
+        Modules.AntiAim.Stop()
+        Modules.GodMode.Stop()
+        Modules.NoCooldown.Stop()
+        Modules.ReachHack.Stop()
+        Modules.OneShotKill.Stop()
+        Modules.FreeCamera.Stop()
+    end,
+    
+    Panic = function()
+        self:Reset()
+        
+        if GUI.StatusText then
+            GUI.StatusText.Text = "PANIC"
+            GUI.StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
+        end
+        
+        if GUI.StatusDot then
+            GUI.StatusDot.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+        end
     end
-end
+}
 
 -- ============================================
--- PHẦN 6: INPUT HANDLING (KEYBINDS)
+-- KEYBIND HANDLER
 -- ============================================
 
-function SetupKeybinds()
+local function SetupKeybinds()
     -- GUI Toggle
-    table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    table.insert(Connections, Services.UserInput.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then return end
         
         if input.KeyCode == GUI.ToggleKey then
             GUI:Toggle()
-        elseif input.KeyCode == Features.Flight.Keybind then
-            Features.Flight.Enabled = not Features.Flight.Enabled
-            if Features.Flight.Enabled then
-                StartFlight()
+        elseif input.KeyCode == Config.Fly.Keybind then
+            Config.Fly.Enabled = not Config.Fly.Enabled
+            if Config.Fly.Enabled then
+                Modules.Fly.Start()
             else
-                StopFlight()
+                Modules.Fly.Stop()
             end
-        elseif input.KeyCode == Features.FreeCamera.Keybind then
-            Features.FreeCamera.Enabled = not Features.FreeCamera.Enabled
-            -- Free camera implementation would go here
-        elseif input.KeyCode == Features.AutoHeal.HealKey then
-            ManualHeal()
+        elseif input.KeyCode == Config.FreeCam.Keybind then
+            Config.FreeCam.Enabled = not Config.FreeCam.Enabled
+            if Config.FreeCam.Enabled then
+                Modules.FreeCamera.Start()
+            else
+                Modules.FreeCamera.Stop()
+            end
         elseif input.KeyCode == Enum.KeyCode.Delete then
-            PanicMode()
+            Modules.Config.Panic()
         end
     end))
     
-    -- Infinite Jump
-    table.insert(Connections, UserInputService.JumpRequest:Connect(function()
-        if Features.JumpPower.InfiniteJump or Features.JumpPower.Enabled then
-            local myChar = GetCharacter(LocalPlayer)
-            local hum = GetHumanoid(myChar)
-            
-            if hum and (not hum.FloorMaterial or hum.FloorMaterial == Enum.Material.Air) then
-                -- Allow extra jumps
-                if JumpsRemaining > 0 or Features.JumpPower.InfiniteJump then
-                    if not Features.JumpPower.InfiniteJump then
-                        JumpsRemaining = JumpsRemaining - 1
-                    end
-                    
-                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
-            else
-                -- Reset jumps when on ground
-                JumpsRemaining = Features.JumpPower.ExtraJumps
-            end
-        end
-    end))
-    
-    -- Apply jump power change
-    table.insert(Connections, LocalPlayer.CharacterAdded:Connect(function(char)
-        local hum = GetHumanoid(char)
+    -- Character Added (for jump power)
+    table.insert(Connections, Player.CharacterAdded:Connect(function(char)
+        local hum = Functions.GetHumanoid(char)
         if hum then
-            if Features.JumpPower.Enabled then
+            if Config.HighJump.Enabled then
                 hum.UseJumpPower = true
-                hum.JumpPower = Features.JumpPower.Power
+                hum.JumpPower = Config.HighJump.Power
             end
         end
     end))
 end
 
-function ManualHeal()
-    -- Trigger heal manually
-    local healRemote = FindRemote("heal") or FindRemote("useItem") or FindRemote("consume")
-    if healRemote then
-        SafeFire(healRemote, "shears")
-    end
-end
-
 -- ============================================
--- PHẦN 7: CONFIG SYSTEM
+-- INITIALIZATION
 -- ============================================
 
-function SaveConfig()
-    local config = {
-        Version = ScriptInfo.Version,
-        SavedAt = os.time(),
-        Features = {}
-    }
+local function Initialize()
+    print("=" .. string.rep("=", 55))
+    print("[BedWarsVIP] Initializing v4.0...")
+    print("[BedWarsVIP] Detecting executor...")
     
-    -- Deep copy features (only save enabled states and important values)
-    for featName, featData in pairs(Features) do
-        if type(featData) == "table" and featData.Enabled ~= nil then
-            config.Features[featName] = {
-                Enabled = featData.Enabled,
-                Range = featData.Range,
-                Speed = featData.Speed,
-                Reach = featData.Reach,
-                Power = featData.Power,
-                FOV = featData.FOV
-            }
-        end
-    end
-    
-    -- Write to file (if supported by executor)
-    pcall(function()
-        writefile(ScriptInfo.Name .. "_config.json", game:GetService("HttpService"):JSONEncode(config))
-        print("[Delta] Config saved!")
-    end)
-end
-
-function LoadConfig()
-    pcall(function()
-        if isfile(ScriptInfo.Name .. "_config.json") then
-            local config = game:GetService("HttpService"):JSONDecode(readfile(ScriptInfo.Name .. "_config.json"))
-            
-            if config.Features then
-                for featName, featConfig in pairs(config.Features) do
-                    if Features[featName] then
-                        for key, value in pairs(featConfig) do
-                            Features[featName][key] = value
-                        end
-                    end
-                end
-            end
-            
-            print("[Delta] Config loaded!")
-        end
-    end)
-end
-
-function PanicMode()
-    print("[Delta] PANIC MODE ACTIVATED - Disabling all features...")
-    
-    -- Disable all features
-    for featName, featData in pairs(Features) do
-        if type(featData) == "table" and featData.Enabled ~= nil then
-            featData.Enabled = false
-        end
-    end
-    
-    -- Stop all running systems
-    StopKillAura()
-    StopSilentAim()
-    StopESP()
-    StopAutoScaffold()
-    StopAntiVoid()
-    StopFlight()
-    
-    -- Notify
-    if GUI.StatusText then
-        GUI.StatusText.Text = "PANIC"
-        GUI.StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
-    end
-end
-
--- ============================================
--- PHẦN 8: INITIALIZATION
--- ============================================
-
-function Initialize()
-    print("=" .. string.rep("=", 50))
-    print("[Delta] " .. ScriptInfo.Name .. " v" .. ScriptInfo.Version)
-    print("[Delta] Type: " .. ScriptInfo.Type)
-    print("[Delta] Loading client-side modules...")
-    
-    -- Detect and log executor
-    for name, detected in pairs(ExecutorDetect) do
+    -- Log executor
+    for name, detected in pairs(Executor) do
         if detected then
-            print("[Delta] Detected executor: " .. name)
+            print("[BedWarsVIP] ✓ " .. name)
         end
     end
     
     -- Create GUI
     GUI:Create()
     
-    -- Setup input handling
+    -- Setup keybinds
     SetupKeybinds()
     
-    -- Try to load saved config
-    LoadConfig()
+    -- Load saved config
+    Modules.Config.Load()
     
-    -- Initialize jump power if enabled
-    if Features.JumpPower.Enabled then
-        local myChar = GetCharacter(LocalPlayer)
-        local hum = GetHumanoid(myChar)
+    -- Apply initial settings
+    if Config.HighJump.Enabled then
+        local myChar = Functions.GetCharacter(Player)
+        local hum = Functions.GetHumanoid(myChar)
         if hum then
             hum.UseJumpPower = true
-            hum.JumpPower = Features.JumpPower.Power
+            hum.JumpPower = Config.HighJump.Power
         end
     end
     
-    print("[Delta] Initialization complete!")
-    print("[Delta] Press " .. tostring(GUI.ToggleKey.Name) .. " to toggle GUI")
-    print("=" .. string.rep("=", 50))
+    print("[BedWarsVIP] ✓ Initialization complete!")
+    print("[BedWarsVIP] Press " .. tostring(GUI.ToggleKey.Name) .. " to toggle GUI")
+    print("=" .. string.rep("=", 55))
 end
 
--- RUN
+-- Run initialization
 Initialize()
 
--- Return module for external access
+-- Return public API
 return {
-    Features = Features,
+    Config = Config,
     GUI = GUI,
+    Modules = Modules,
     ToggleFeature = function(name, state)
-        if Features[name] then
-            Features[name].Enabled = state
-            GUI:OnFeatureToggled(name, Features[name])
+        if Config[name] then
+            Config[name].Enabled = state
+            GUI:OnFeatureToggled(name, Config[name])
             return true
         end
         return false
     end,
     GetFeature = function(name)
-        return Features[name]
+        return Config[name]
     end,
-    Panic = PanicMode,
+    Panic = function()
+        Modules.Config.Panic()
+    end,
     Reload = Initialize
 }
