@@ -1,0 +1,2183 @@
+--[[
+    ============================================
+    EASY.GG BEDWARS - CLIENT-SIDE DELTA SCRIPT
+    Phiên bản: 3.0 Delta Edition
+    Kiến trúc: Client-Side Exploitation
+    Pattern: Delta/Xeno/Script-Ware Style
+    
+    TECHNIQUES SỬ DỤNG:
+    - getrawgame / getgc / getrenv
+    - hookmetamethod / hookfunction / replaceclosure
+    - getconnections / setupvalueclip / setconstant
+    - Drawing API (client-side ESP)
+    - Client-side CFrame manipulation
+    - Raycast manipulation (Silent Aim)
+    - FireServer argument spoofing
+    - Metatable hooking
+    ============================================
+]]
+
+-- ============================================
+-- PHẦN 1: ENVIRONMENT DETECTION & SETUP
+-- ============================================
+
+local ScriptInfo = {
+    Name = "DeltaBedwars",
+    Version = "3.0",
+    Type = "Client-Side",
+    Executor = "Universal"
+}
+
+-- Detect executor environment
+local ExecutorDetect = {
+    IsSynapse = syn and true or false,
+    IsScriptWare = scriptware and true or false,
+    IsDelta = delta and true or false,
+    IsXeno = xeno and true or false,
+    IsWave = wave and true or false,
+    IsKrystal = krystal and true or false
+}
+
+-- Lấy functions tùy executor
+local getrawgame = getrawgame or rawget_game
+local getgc = getgc or (get_gc_objects or function() return {} end)
+local getrenv = getrenv or function() return getfenv(2) end
+local hookfunc = hookfunction or hookfunc or function(...) return ... end
+local hookmeta = hookmetamethod or hookmetamethod or function(...) return ... end
+local getconn = getconnections or get_connections or function() return {} end
+local setconst = setconstant or set_const or function() end
+local getupval = getupvalue or get_upvalue or function() return nil end
+local setupval = setupvalue or set_upvalue or function() end
+local clipset = setupvalueclip or setclipboard or function() end
+local islclosure = is_lc_closure or function(f) return not iscclosure(f) end
+local iscclosure = is_cc_closure or function(f) return not islclosure(f) end
+local runcode = runcode or loadstring or function(s) return load(s)() end
+local request = request or http_request or function() return nil end
+
+-- Environment variables
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Lighting = game:GetService("Lighting")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- Easy.gg Services (client-side references)
+local EasyServices = {}
+local RemoteFolder = ReplicatedStorage:FindFirstChild("Remotes") 
+                    or ReplicatedStorage:FindFirstChild("Events") 
+                    or ReplicatedStorage:FindFirstChild("Network")
+
+-- ============================================
+-- PHẦN 2: UTILITY FUNCTIONS (CLIENT-SIDE)
+-- ============================================
+
+--- Kiểm tra object validity
+---@param obj any: Object cần kiểm tra
+---@return boolean
+local function IsValid(obj)
+    if type(obj) ~= "userdata" then return false end
+    local success, result = pcall(function()
+        return obj and obj.Parent ~= nil
+    end)
+    return success and result == true
+end
+
+--- Tính khoảng cách giữa 2 Vector3
+---@param a Vector3
+---@param b Vector3
+---@return number
+local function Distance(a, b)
+    if not a or not b then return math.huge end
+    return (a - b).Magnitude
+end
+
+--- Lấy character của player
+---@param player Player
+---@return Model|nil
+local function GetCharacter(player)
+    if not IsValid(player) then return nil end
+    return player.Character or player.CharacterAdded:Wait()
+end
+
+--- Lấy Humanoid từ character
+---@param char Model
+---@return Humanoid|nil
+local function GetHumanoid(char)
+    if not IsValid(char) then return nil end    return char:FindFirstChildOfClass("Humanoid")
+end
+
+--- Lấy RootPart (HumanoidRootPart hoặc Torso)
+---@param char Model
+---@return BasePart|nil
+local function GetRootPart(char)
+    local hum = GetHumanoid(char)    if not hum then return nil end
+    return hum.RootPart or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+end
+
+--- Lấy vị trí player
+---@param player Player
+---@return Vector3|nil
+local function GetPosition(player)
+    local char = GetCharacter(player)
+    local root = GetRootPart(char)
+    return root and root.Position
+end
+
+--- Kiểm tra player còn sống không
+---@param player Player
+---@return boolean
+local function IsAlive(player)
+    local hum = GetHumanoid(GetCharacter(player))
+    return hum and hum.Health > 0 and hum:GetState() ~= Enum.HumanoidStateType.Dead
+end
+
+--- Kiểm tra có phải team mình không (dùng Easy.gg TeamService hoặc fallback)
+---@param player Player
+---@return boolean
+local function IsTeammate(player)
+    -- Thử lấy team info từ Easy.gg
+    pcall(function()
+        local TeamService = getrenv().TeamService
+        if TeamService then
+            local myTeam = TeamService.getTeam(LocalPlayer)
+            local theirTeam = TeamService.getTeam(player)
+            return myTeam and theirTeam and myTeam == theirTeam
+        end
+    end)
+    
+    -- Fallback: kiểm tra team color/name
+    if LocalPlayer.Team and player.Team then
+        return LocalPlayer.Team == player.Team
+    end
+    
+    return false
+end
+
+--- World to Screen Point
+---@param pos Vector3
+---@return Vector2|nil, boolean
+local function WorldToScreen(pos)
+    if not IsValid(Camera) then return nil, false end
+    local success, result, onScreen = pcall(function()
+        return Camera:WorldToViewportPoint(pos)
+    end)
+    if success then        return Vector2.new(result.X, result.Y), onScreen
+    end
+    return nil, false
+end
+
+--- Lấy tất cả players (loại trừ self)
+---@return table
+local function GetAllPlayers()
+    local plist = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and IsValid(player) then
+            table.insert(plist, player)
+        end
+    end
+    return plist
+end
+
+--- Lấy kẻ địch gần nhất
+---@param maxDist number
+---@return Player|nil, number
+local function GetNearestEnemy(maxDist)
+    maxDist = maxDist or math.huge
+    local nearest = nil
+    local minDist = maxDist
+    local myPos = GetPosition(LocalPlayer)
+    
+    if not myPos then return nil, math.huge end
+    
+    for _, player in pairs(GetAllPlayers()) do
+        if IsAlive(player) and not IsTeammate(player) then
+            local pos = GetPosition(player)
+            if pos then
+                local dist = Distance(myPos, pos)
+                if dist < minDist then
+                    minDist = dist
+                    nearest = player
+                end
+            end
+        end
+    end
+    
+    return nearest, minDist
+end
+
+--- Lấy kẻ địch gần nhất đến crosshair (cho silent aim)
+---@param fov number: Field of view max
+---@return Player|nil, Vector3
+local function GetNearestToCrosshair(fov)
+    fov = fov or 180
+    local closest = nil
+    local shortestFov = fov
+    local bestHitPos = nil
+    
+    local mousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    
+    for _, player in pairs(GetAllPlayers()) do
+        if IsAlive(player) and not IsTeammate(player) then
+            local char = GetCharacter(player)
+            local root = GetRootPart(char)
+            
+            if root then
+                -- Kiểm tra nhiều hitbox points
+                local hitpoints = {
+                    root.Position + Vector3.new(0, 0, 0),   -- Body
+                    root.Position + Vector3.new(0, 3, 0),   -- Head
+                }
+                
+                -- Thêm head nếu có
+                local head = char:FindFirstChild("Head")
+                if head then
+                    table.insert(hitpoints, head.Position)
+                end
+                
+                for _, hitPos in pairs(hitpoints) do
+                    local screenPos, onScreen = WorldToScreen(hitPos)
+                    if onScreen and screenPos then
+                        local diff = Vector2.new(screenPos.X - mousePos.X, screenPos.Y - mousePos.Y)
+                        local currentFov = math.sqrt(diff.X * diff.X + diff.Y * diff.Y)
+                        
+                        if currentFov < shortestFov then
+                            shortestFov = currentFov
+                            closest = player
+                            bestHitPos = hitPos
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return closest, bestHitPos
+end
+
+--- Raycast từ camera đến position (dùng để check wall bang)
+---@param pos Vector3
+---@return boolean: true nếu có line of sight
+local function HasLineOfSight(pos)
+    if not IsValid(Camera) then return false end
+    
+    local origin = Camera.CFrame.Position
+    local direction = (pos - origin)
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {GetCharacter(LocalPlayer)}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    
+    local result = workspace:Raycast(origin, direction.Unit * direction.Magnitude, params)
+    return result == nil
+end
+
+--- Tìm remote bằng name pattern
+---@param pattern string
+---@return RemoteEvent|RemoteFunction|nil
+local function FindRemote(pattern)
+    if not RemoteFolder then
+        -- Tìm recursive trong ReplicatedStorage
+        for _, desc in pairs(ReplicatedStorage:GetDescendants()) do
+            if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then
+                if desc.Name:find(pattern) then
+                    return desc
+                end
+            end
+        end
+        return nil
+    end
+    
+    for _, item in pairs(RemoteFolder:GetChildren()) do
+        if item:IsA("RemoteEvent") or item:IsA("RemoteFunction") then
+            if item.Name:find(pattern) then
+                return item
+            end
+        end
+    end
+    return nil
+end
+
+--- Fire remote an toàn với error handling
+---@param remote RemoteEvent|RemoteFunction
+---@param ... any: Arguments
+local function SafeFire(remote, ...)
+    if not IsValid(remote) then return false end
+    pcall(function()
+        if remote:IsA("RemoteEvent") then
+            remote:FireServer(...)
+        elseif remote:IsA("RemoteFunction") then
+            remote:InvokeServer(...)
+        end
+    end)
+    return true
+end
+
+-- ============================================
+-- PHẦN 3: CONFIG & FEATURE STATES
+-- ============================================
+
+local Features = {
+    -- COMBAT
+    KillAura = {
+        Enabled = false,
+        Range = 18,
+        Delay = 0.1,
+        Mode = "normal", -- normal, silent, reach
+        ThroughWalls = false,
+        MaxTargets = 3,
+        ShowTarget = true
+    },
+    SilentAim = {
+        Enabled = false,
+        FOV = 15,
+        HitChance = 100,
+        TargetPart = "Head",
+        ShowFOV = true,
+        WallCheck = true,
+        UseNearestPoint = true
+    },
+    ReachHack = {
+        Enabled = false,
+        Reach = 25,
+        OriginalReach = 3
+    },
+    NoCooldown = {
+        Enabled = false
+    },
+    OneShotKill = {
+        Enabled = false,
+        Damage = 100
+    },
+    
+    -- MOVEMENT
+    SpeedHack = {
+        Enabled = false,
+        Speed = 1.5,
+        Method = "velocity", -- velocity, cframe, stepper
+        OnlyWhenMoving = true
+    },
+    JumpPower = {
+        Enabled = false,
+        Power = 80,
+        InfiniteJump = false,
+        ExtraJumps = 5
+    },
+    HighJump = {
+        Enabled = false,
+        HeightMultiplier = 2
+    },
+    AutoScaffold = {
+        Enabled = false,
+        TowerMode = true,
+        ExpandMode = false,
+        AutoPlaceDelay = 0.05,
+        TowerSpeed = 0.02
+    },
+    AntiVoid = {
+        Enabled = false,
+        YLevel = -50,
+        Method = "teleport", -- teleport, place, both
+        ResetOnTrigger = true
+    },
+    NoFallDamage = {
+        Enabled = false,
+        MinHeight = 20,
+        CancelVelocity = true
+    },
+    Flight = {
+        Enabled = false,
+        Speed = 50,
+        Method = "cframe", -- cframe, velocity, gravity
+        Noclip = false,
+        Keybind = Enum.KeyCode.F
+    },
+    Spider = {
+        Enabled = false,
+        ClimbSpeed = 30
+    },
+    
+    -- VISUALS (CLIENT-SIDE DRAWING API)
+    ESP = {
+        Enabled = false,
+        Box = true,
+        Name = true,
+        Health = true,
+        Distance = true,
+        Tracer = true,
+        Chams = false,
+        Outline = true,
+        MaxDistance = 500,
+        EnemyColor = Color3.fromRGB(255, 50, 50),
+        TeamColor = Color3.fromRGB(50, 150, 255),
+        BoxFill = 0.1,
+        TextSize = 14
+    },
+    BedESP = {
+        Enabled = false,
+        ShowThroughWalls = true,
+        Color = Color3.fromRGB(255, 200, 50),
+        Size = 20
+    },
+    FOVCircle = {
+        Enabled = false,
+        Color = Color3.fromRGB(255, 255, 255),
+        Transparency = 0.5,
+        Filled = false
+    },
+    Tracers = {
+        Enabled = false,
+        From = "bottom", -- bottom, center, top
+        Color = Color3.fromRGB(255, 255, 255),
+        Thickness = 1
+    },
+    Chams = {
+        Enabled = false,
+        FillColor = Color3.fromRGB(255, 0, 0, 0.3),
+        OutlineColor = Color3.fromRGB(255, 255, 255)
+    },
+    
+    -- UTILITY
+    AutoHeal = {
+        Enabled = false,
+        HealthPercent = 40,
+        Priority = {"shears", "apple", "soup"},
+        HealKey = Enum.KeyCode.H
+    },
+    AutoBuy = {
+        Enabled = false,
+        Items = {},
+        AutoUpgrade = true
+    },
+    InventorySpoof = {
+        Enabled = false,
+        ItemName = "diamond_sword"
+    },
+    AntiAim = {
+        Enabled = false,
+        Pitch = "down", -- down, up, jitter, spin
+        Yaw = "spin", -- spin, backward, jitter
+        SpinSpeed = 360
+    },
+    FreeCamera = {
+        Enabled = false,
+        Speed = 5,
+        Keybind = Enum.KeyCode.P
+    }
+}
+
+-- Runtime variables
+local Connections = {}
+local Drawings = {}
+local Hooks = {}
+local OriginalFunctions = {}
+local CurrentTarget = nil
+local ScaffoldBlocks = {}
+local JumpsRemaining = 0
+local IsFlying = false
+local FlyVelocity = Vector3.new(0, 0, 0)
+
+-- ============================================
+-- PHẦN 4: GUI SYSTEM (DELTA STYLE)
+-- ============================================
+
+local GUI = {
+    Instance = nil,
+    ToggleKey = Enum.KeyCode.Insert,
+    Visible = true
+}
+
+--- Tạo main GUI window
+function GUI:Create()
+    -- Main ScreenGui
+    self.Instance = Instance.new("ScreenGui")
+    self.Instance.Name = ScriptInfo.Name .. "_Main"
+    self.Instance.ResetOnSpawn = false
+    self.Instance.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Syn/Xeno protect (anti-log script detector)
+    if ExecutorDetect.IsSynapse then
+        syn.protect_gui(self.Instance)
+        self.Instance.Parent = game.CoreGui
+    else
+        self.Instance.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+    end
+    
+    -- Main Frame (Delta-style dark theme)
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainWindow"
+    MainFrame.Size = UDim2.new(0, 650, 0, 480)
+    MainFrame.Position = UDim2.new(0.5, -325, 0.5, -240)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    MainFrame.Parent = self.Instance
+    
+    -- Glow effect
+    local Glow = Instance.new("ImageLabel")
+    Glow.Name = "Glow"
+    Glow.AnchorPoint = Vector2.new(0.5, 0.5)
+    Glow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Glow.Size = UDim2.new(1, 60, 1, 60)
+    Glow.BackgroundTransparency = 1
+    Glow.Image = "rbxassetid://499418466"
+    Glow.ImageColor3 = Color3.fromRGB(80, 120, 255)
+    Glow.ImageTransparency = 0.8
+    Glow.ZIndex = -1
+    Glow.Parent = MainFrame
+    
+    -- Corner radius
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 8)
+    Corner.Parent = MainFrame
+    
+    -- Border
+    local Border = Instance.new("UIStroke")
+    Border.Color = Color3.fromRGB(70, 130, 255)
+    Border.Thickness = 1.5
+    Border.Parent = MainFrame
+    
+    -- Header
+    local Header = Instance.new("Frame")
+    Header.Name = "Header"
+    Header.Size = UDim2.new(1, 0, 0, 38)
+    Header.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    Header.BorderSizePixel = 0
+    Header.Parent = MainFrame
+    
+    local HeaderCorner = Instance.new("UICorner")
+    HeaderCorner.CornerRadius = UDim.new(0, 8)
+    HeaderCorner.Parent = Header
+    
+    local HeaderFix = Instance.new("Frame")
+    HeaderFix.Size = UDim2.new(1, 0, 0, 8)
+    HeaderFix.Position = UDim2.new(0, 0, 1, -8)
+    HeaderFix.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    HeaderFix.BorderSizePixel = 0
+    HeaderFix.Parent = Header
+    
+    -- Title
+    local Title = Instance.new("TextLabel")
+    Title.Name = "Title"
+    Title.Size = UDim2.new(1, -100, 1, 0)
+    Title.Position = UDim2.new(0, 12, 0, 0)
+    Title.BackgroundTransparency = 1
+    Title.Text = "  ⚡ " .. ScriptInfo.Name .. " v" .. ScriptInfo.Version
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextSize = 16
+    Title.Font = Enum.Font.GothamBold
+    Title.TextXAlignment = Enum.TextXAlignment.Left
+    Title.Parent = Header
+    
+    -- Status indicator
+    local StatusDot = Instance.new("Frame")
+    StatusDot.Name = "StatusDot"
+    StatusDot.Size = UDim2.new(0, 8, 0, 8)
+    StatusDot.Position = UDim2.new(1, -85, 0.5, -4)
+    StatusDot.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+    StatusDot.BorderSizePixel = 0
+    StatusDot.Parent = Header
+    
+    local DotCorner = Instance.new("UICorner")
+    DotCorner.CornerRadius = UDim.new(0, 4)
+    DotCorner.Parent = StatusDot
+    
+    local StatusText = Instance.new("TextLabel")
+    StatusText.Name = "StatusText"
+    StatusText.Size = UDim2.new(0, 70, 1, 0)
+    StatusText.Position = UDim2.new(1, -75, 0, 0)
+    StatusText.BackgroundTransparency = 1
+    StatusText.Text = "LOADED"
+    StatusText.TextColor3 = Color3.fromRGB(50, 255, 50)
+    StatusText.TextSize = 11
+    StatusText.Font = Enum.Font.GothamBold
+    StatusText.Parent = Header
+    
+    -- Close button
+    local CloseBtn = Instance.new("ImageButton")
+    CloseBtn.Name = "CloseButton"
+    CloseBtn.Size = UDim2.new(0, 32, 0, 32)
+    CloseBtn.Position = UDim2.new(1, -42, 0, 3)
+    CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 65, 65)
+    CloseBtn.BorderSizePixel = 0
+    CloseBtn.Image = ""
+    CloseBtn.Parent = Header
+    
+    local CloseCorner = Instance.new("UICorner")
+    CloseCorner.CornerRadius = UDim.new(0, 6)
+    CloseCorner.Parent = CloseBtn
+    
+    local CloseIcon = Instance.new("TextLabel")
+    CloseIcon.Size = UDim2.new(1, 0, 1, 0)
+    CloseIcon.BackgroundTransparency = 1
+    CloseIcon.Text = "✕"
+    CloseIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CloseIcon.TextSize = 14
+    CloseIcon.Font = Enum.Font.GothamBold
+    CloseIcon.Parent = CloseBtn
+    
+    CloseBtn.MouseButton1Click:Connect(function()
+        self:Toggle()
+    end)
+    
+    -- Minimize button
+    local MinBtn = Instance.new("ImageButton")
+    MinBtn.Name = "MinimizeButton"
+    MinBtn.Size = UDim2.new(0, 32, 0, 32)
+    MinBtn.Position = UDim2.new(1, -78, 0, 3)
+    MinBtn.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
+    MinBtn.BorderSizePixel = 0
+    MinBtn.Image = ""
+    MinBtn.Parent = Header
+    
+    local MinCorner = Instance.new("UICorner")
+    MinCorner.CornerRadius = UDim.new(0, 6)
+    MinCorner.Parent = MinBtn
+    
+    local MinIcon = Instance.new("TextLabel")
+    MinIcon.Size = UDim2.new(1, 0, 1, 0)
+    MinIcon.BackgroundTransparency = 1
+    MinIcon.Text = "−"
+    MinIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MinIcon.TextSize = 18
+    MinIcon.Font = Enum.Font.GothamBold
+    MinIcon.Parent = MinBtn
+    
+    -- Tab bar container
+    local TabContainer = Instance.new("Frame")
+    TabContainer.Name = "TabContainer"
+    TabContainer.Size = UDim2.new(1, -20, 0, 32)
+    TabContainer.Position = UDim2.new(0, 10, 0, 43)
+    TabContainer.BackgroundTransparency = 1
+    TabContainer.Parent = MainFrame
+    
+    -- Tabs data
+    local Tabs = {
+        {Name = "Combat", Icon = "⚔️"},
+        {Name = "Movement", Icon = "🏃"},
+        {Name = "Visuals", Icon = "👁️"},
+        {Name = "Utility", Icon = "🛠️"},
+        {Name = "Settings", Icon = "⚙️"}
+    }
+    
+    local TabButtons = {}
+    local TabWidth = 1 / #Tabs
+    
+    for i, tabData in pairs(Tabs) do
+        local TabBtn = Instance.new("TextButton")
+        TabBtn.Name = tabData.Name .. "Tab"
+        TabBtn.Size = UDim2.new(TabWidth, -4, 1, 0)
+        TabBtn.Position = UDim2.new((i-1) * TabWidth, 2, 0, 0)
+        TabBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+        TabBtn.BorderSizePixel = 0
+        TabBtn.Text = tabData.Icon .. " " .. tabData.Name
+        TabBtn.TextColor3 = Color3.fromRGB(140, 140, 160)
+        TabBtn.TextSize = 12
+        TabBtn.Font = Enum.Font.GothamSemibold
+        TabBtn.Parent = TabContainer
+        
+        local BtnCorner = Instance.new("UICorner")
+        BtnCorner.CornerRadius = UDim.new(0, 5)
+        BtnCorner.Parent = TabBtn
+        
+        table.insert(TabButtons, TabBtn)
+        
+        TabBtn.MouseButton1Click:Connect(function()
+            self:SwitchTab(tabData.Name)
+        end)
+    end
+    
+    -- Content area
+    local ContentArea = Instance.new("Frame")
+    ContentArea.Name = "ContentArea"
+    ContentArea.Size = UDim2.new(1, -16, 1, -83)
+    ContentArea.Position = UDim2.new(0, 8, 0, 78)
+    ContentArea.BackgroundTransparency = 1
+    ContentArea.ClipsDescendants = true
+    ContentArea.Parent = MainFrame
+    
+    -- Create tab contents
+    self.Tabs = {}
+    self.TabButtons = TabButtons
+    self.ContentArea = ContentArea
+    self.MainFrame = MainFrame
+    self.StatusDot = StatusDot
+    self.StatusText = StatusText
+    
+    self:CreateCombatTab()
+    self:CreateMovementTab()
+    self:CreateVisualsTab()
+    self:CreateUtilityTab()
+    self:CreateSettingsTab()
+    
+    -- Default tab
+    self:SwitchTab("Combat")
+    
+    return self.Instance
+end
+
+--- Toggle GUI visibility
+function GUI:Toggle()
+    if self.Instance then
+        self.Visible = not self.Visible
+        self.Instance.Enabled = self.Visible
+    end
+end
+
+--- Switch between tabs
+---@param tabName string
+function GUI:SwitchTab(tabName)
+    -- Hide all tab content
+    for name, content in pairs(self.Tabs) do
+        if content then
+            content.Visible = (name == tabName)
+        end
+    end
+    
+    -- Update button styles
+    for i, btn in pairs(self.TabButtons) do
+        local btnName = btn.Name:gsub("Tab$", "")
+        if btnName == tabName then
+            btn.BackgroundColor3 = Color3.fromRGB(60, 90, 180)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+            btn.TextColor3 = Color3.fromRGB(140, 140, 160)
+        end
+    end
+end
+
+--- Create section header
+---@param parent Instance
+---@param title string
+---@param color Color3
+---@return number yOffset
+function GUI:SectionHeader(parent, title, color, yPos)
+    local Section = Instance.new("Frame")
+    Section.Name = title .. "Section"
+    Section.Size = UDim2.new(1, -10, 0, 24)
+    Section.Position = UDim2.new(0, 5, 0, yPos)
+    Section.BackgroundTransparency = 1
+    Section.Parent = parent
+    
+    local Bar = Instance.new("Frame")
+    Bar.Size = UDim2.new(1, 0, 0, 2)
+    Bar.Position = UDim2.new(0, 0, 0, 10)
+    Bar.BackgroundColor3 = color or Color3.fromRGB(80, 120, 255)
+    Bar.BorderSizePixel = 0
+    Bar.Parent = Section
+    
+    local BarCorner = Instance.new("UICorner")
+    BarCorner.CornerRadius = UDim.new(0, 1)
+    BarCorner.Parent = Bar
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -8, 1, 0)
+    Label.Position = UDim2.new(0, 8, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = "  " .. title
+    Label.TextColor3 = color or Color3.fromRGB(200, 200, 220)
+    Label.TextSize = 13
+    Label.Font = Enum.Font.GothamBold
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Section
+    
+    return yPos + 28
+end
+
+--- Create toggle switch
+---@param parent Instance
+---@param featureName string
+---@param featureTable table
+---@param yPos number
+---@return number newYPos
+function GUI:CreateToggle(parent, featureName, featureTable, yPos)
+    local Container = Instance.new("Frame")
+    Container.Name = featureName .. "Row"
+    Container.Size = UDim2.new(1, -10, 0, 30)
+    Container.Position = UDim2.new(0, 5, 0, yPos)
+    Container.BackgroundTransparency = 1
+    Container.Parent = parent
+    
+    -- Label
+    local Label = Instance.new("TextLabel")
+    Label.Name = "FeatureLabel"
+    Label.Size = UDim2.new(1, -55, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = featureName
+    Label.TextColor3 = Color3.fromRGB(210, 210, 220)
+    Label.TextSize = 13
+    Label.Font = Enum.Font.Gotham
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.TextTruncate = Enum.TextTruncate.AtEnd
+    Label.Parent = Container
+    
+    -- Toggle background
+    local ToggleBg = Instance.new("Frame")
+    ToggleBg.Name = "ToggleBg"
+    ToggleBg.Size = UDim2.new(0, 40, 0, 20)
+    ToggleBg.Position = UDim2.new(1, -43, 0.5, -10)
+    ToggleBg.BackgroundColor3 = featureTable.Enabled and Color3.fromRGB(50, 180, 100) or Color3.fromRGB(60, 60, 75)
+    ToggleBg.BorderSizePixel = 0
+    ToggleBg.Parent = Container
+    
+    local BgCorner = Instance.new("UICorner")
+    BgCorner.CornerRadius = UDim.new(0, 10)
+    BgCorner.Parent = ToggleBg
+    
+    -- Toggle indicator
+    local Indicator = Instance.new("Frame")
+    Indicator.Name = "Indicator"
+    Indicator.Size = UDim2.new(0, 16, 0, 16)
+    Indicator.Position = featureTable.Enabled and UDim2.new(0, 22, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+    Indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Indicator.BorderSizePixel = 0
+    Indicator.Parent = ToggleBg
+    
+    local IndCorner = Instance.new("UICorner")
+    IndCorner.CornerRadius = UDim.new(0, 8)
+    IndCorner.Parent = Indicator
+    
+    -- Click handler
+    local clickConn = Container.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            featureTable.Enabled = not featureTable.Enabled
+            
+            -- Update visuals
+            ToggleBg.BackgroundColor3 = featureTable.Enabled and Color3.fromRGB(50, 180, 100) or Color3.fromRGB(60, 60, 75)
+            Indicator.Position = featureTable.Enabled and UDim2.new(0, 22, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+            
+            -- Trigger feature callback
+            self:OnFeatureToggled(featureName, featureTable)
+        end
+    end)
+    
+    table.insert(Connections, clickConn)
+    
+    return yPos + 34
+end
+
+--- Create slider control
+---@param parent Instance
+---@param label string
+---@param min number
+---@param max number
+---@param default number
+---@param callback function
+---@param yPos number
+---@return number newYPos
+function GUI:CreateSlider(parent, label, min, max, default, callback, yPos)
+    local Container = Instance.new("Frame")
+    Container.Name = label .. "Slider"
+    Container.Size = UDim2.new(1, -10, 0, 42)
+    Container.Position = UDim2.new(0, 5, 0, yPos)
+    Container.BackgroundTransparency = 1
+    Container.Parent = parent
+    
+    -- Top row: label + value
+    local TopRow = Instance.new("Frame")
+    TopRow.Size = UDim2.new(1, 0, 0, 20)
+    TopRow.BackgroundTransparency = 1
+    TopRow.Parent = Container
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.7, 0, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = label
+    Label.TextColor3 = Color3.fromRGB(190, 190, 200)
+    Label.TextSize = 12
+    Label.Font = Enum.Font.Gotham
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = TopRow
+    
+    local ValueLabel = Instance.new("TextLabel")
+    ValueLabel.Size = UDim2.new(0.3, 0, 1, 0)
+    ValueLabel.BackgroundTransparency = 1
+    ValueLabel.Text = tostring(default)
+    ValueLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
+    ValueLabel.TextSize = 12
+    ValueLabel.Font = Enum.Font.GothamBold
+    ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    ValueLabel.Parent = TopRow
+    
+    -- Slider track
+    local Track = Instance.new("Frame")
+    Track.Name = "Track"
+    Track.Size = UDim2.new(1, 0, 0, 6)
+    Track.Position = UDim2.new(0, 0, 1, -6)
+    Track.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    Track.BorderSizePixel = 0
+    Track.Parent = Container
+    
+    local TrackCorner = Instance.new("UICorner")
+    TrackCorner.CornerRadius = UDim.new(0, 3)
+    TrackCorner.Parent = Track
+    
+    -- Slider fill
+    local fillPercent = (default - min) / (max - min)
+    local Fill = Instance.new("Frame")
+    Fill.Name = "Fill"
+    Fill.Size = UDim2.new(fillPercent, 0, 1, 0)
+    Fill.BackgroundColor3 = Color3.fromRGB(80, 130, 255)
+    Fill.BorderSizePixel = 0
+    Fill.Parent = Track
+    
+    local FillCorner = Instance.new("UICorner")
+    FillCorner.CornerRadius = UDim.new(0, 3)
+    FillCorner.Parent = Fill
+    
+    -- Slider thumb
+    local Thumb = Instance.new("Frame")
+    Thumb.Name = "Thumb"
+    Thumb.Size = UDim2.new(0, 14, 0, 14)
+    Thumb.Position = UDim2.new(fillPercent, -7, 0.5, -7)
+    Thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Thumb.BorderSizePixel = 0
+    Thumb.Parent = Track
+    
+    local ThumbCorner = Instance.new("UICorner")
+    ThumbCorner.CornerRadius = UDim.new(0, 7)
+    ThumbCorner.Parent = Thumb
+    
+    -- Drag logic
+    local dragging = false
+    local dragConn
+    
+    local function updateSlider(input)
+        local relativeX = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
+        local value = min + (max - min) * relativeX
+        
+        fillPercent = relativeX
+        Fill.Size = UDim2.new(fillPercent, 0, 1, 0)
+        Thumb.Position = UDim2.new(fillPercent, -7, 0.5, -7)
+        ValueLabel.Text = tostring(math.floor(value * 10) / 10)
+        
+        if callback then
+            callback(value)
+        end
+    end
+    
+    Track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            updateSlider(input)
+            
+            dragConn = RunService.RenderStepped:Connect(function()
+                if dragging and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                    updateSlider(UserInputService:GetMouseLocation())
+                end
+            end)
+        end
+    end)
+    
+    Track.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+            if dragConn then
+                dragConn:Disconnect()
+                dragConn = nil
+            end
+        end
+    end)
+    
+    return yPos + 48
+end
+
+--- Create dropdown
+---@param parent Instance
+---@param label string
+---@param options table
+---@param selected string
+---@param callback function
+---@param yPos number
+---@return number newYPos
+function GUI:CreateDropdown(parent, label, options, selected, callback, yPos)
+    local Container = Instance.new("Frame")
+    Container.Name = label .. "Dropdown"
+    Container.Size = UDim2.new(1, -10, 0, 28)
+    Container.Position = UDim2.new(0, 5, 0, yPos)
+    Container.BackgroundTransparency = 1
+    Container.Parent = parent
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.35, 0, 1, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = label
+    Label.TextColor3 = Color3.fromRGB(190, 190, 200)
+    Label.TextSize = 12
+    Label.Font = Enum.Font.Gotham
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Container
+    
+    local Dropdown = Instance.new("TextButton")
+    Dropdown.Name = "DropdownBtn"
+    Dropdown.Size = UDim2.new(0.6, 0, 1, 0)
+    Dropdown.Position = UDim2.new(0.4, 0, 0, 0)
+    Dropdown.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    Dropdown.BorderSizePixel = 0
+    Dropdown.Text = selected or options[1]
+    Dropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Dropdown.TextSize = 12
+    Dropdown.Font = Enum.Font.Gotham
+    Dropdown.Parent = Container
+    
+    local DropCorner = Instance.new("UICorner")
+    DropCorner.CornerRadius = UDim.new(0, 5)
+    DropCorner.Parent = Dropdown
+    
+    -- Dropdown list (hidden by default)
+    local ListFrame = Instance.new("Frame")
+    ListFrame.Name = "ListFrame"
+    ListFrame.Size = UDim2.new(1, 0, 0, #options * 26)
+    ListFrame.Position = UDim2.new(0, 0, 1, 2)
+    ListFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+    ListFrame.BorderSizePixel = 0
+    ListFrame.Visible = false
+    ListFrame.ZIndex = 10
+    ListFrame.Parent = Dropdown
+    
+    local ListCorner = Instance.new("UICorner")
+    ListCorner.CornerRadius = UDim.new(0, 5)
+    ListCorner.Parent = ListFrame
+    
+    local ListLayout = Instance.new("UIListLayout")
+    ListLayout.Padding = UDim.new(0, 2)
+    ListLayout.Parent = ListFrame
+    
+    for i, option in pairs(options) do
+        local OptionBtn = Instance.new("TextButton")
+        OptionBtn.Name = option .. "Option"
+        OptionBtn.Size = UDim2.new(1, -8, 0, 24)
+        OptionBtn.Position = UDim2.new(0, 4, 0, 0)
+        OptionBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+        OptionBtn.BorderSizePixel = 0
+        OptionBtn.Text = option
+        OptionBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        OptionBtn.TextSize = 12
+        OptionBtn.Font = Enum.Font.Gotham
+        OptionBtn.ZIndex = 11
+        OptionBtn.Parent = ListFrame
+        
+        local OptCorner = Instance.new("UICorner")
+        OptCorner.CornerRadius = UDim.new(0, 4)
+        OptCorner.Parent = OptionBtn
+        
+        OptionBtn.MouseButton1Click:Connect(function()
+            Dropdown.Text = option
+            ListFrame.Visible = false
+            if callback then
+                callback(option)
+            end
+        end)
+        
+        OptionBtn.MouseEnter:Connect(function()
+            OptionBtn.BackgroundColor3 = Color3.fromRGB(70, 90, 150)
+        end)
+        
+        OptionBtn.MouseLeave:Connect(function()
+            OptionBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+        end)
+    end
+    
+    Dropdown.MouseButton1Click:Connect(function()
+        ListFrame.Visible = not ListFrame.Visible
+    end)
+    
+    return yPos + 32
+end
+
+--- Callback khi feature được toggle
+---@param featureName string
+---@param featureTable table
+function GUI:OnFeatureToggled(featureName, featureTable)
+    local status = featureTable.Enabled and "ENABLED" or "DISABLED"
+    
+    -- Update status text
+    if self.StatusText then
+        self.StatusText.Text = status
+        self.StatusText.TextColor3 = featureTable.Enabled and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 150, 50)
+    end
+    if self.StatusDot then
+        self.StatusDot.BackgroundColor3 = featureTable.Enabled and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 200, 50)
+    end
+    
+    -- Feature-specific initialization/cleanup
+    if featureName == "Kill Aura" then
+        if featureTable.Enabled then
+            StartKillAura()
+        else
+            StopKillAura()
+        end
+    elseif featureName == "Silent Aim" then
+        if featureTable.Enabled then
+            StartSilentAim()
+        else
+            StopSilentAim()
+        end
+    elseif featureName == "ESP" then
+        if featureTable.Enabled then
+            StartESP()
+        else
+            StopESP()
+        end
+    elseif featureName == "Auto Scaffold" then
+        if featureTable.Enabled then
+            StartAutoScaffold()
+        else
+            StopAutoScaffold()
+        end
+    elseif featureName == "Anti-Void" then
+        if featureTable.Enabled then
+            StartAntiVoid()
+        else
+            StopAntiVoid()
+        end
+    elseif featureName == "Flight" then
+        if featureTable.Enabled then
+            StartFlight()
+        else
+            StopFlight()
+        end
+    end
+    
+    print("[Delta] " .. featureName .. ": " .. status)
+end
+
+-- ============================================
+-- TAB CONTENT CREATION
+-- ============================================
+
+function GUI:CreateCombatTab()
+    local TabFrame = Instance.new("ScrollingFrame")
+    TabFrame.Name = "CombatContent"
+    TabFrame.Size = UDim2.new(1, 0, 1, 0)
+    TabFrame.ScrollBarThickness = 3
+    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 800)
+    TabFrame.BackgroundTransparency = 1
+    TabFrame.Visible = false
+    TabFrame.Parent = self.ContentArea
+    
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 2)
+    Layout.Parent = TabFrame
+    
+    local y = 5
+    
+    y = self:SectionHeader(TabFrame, "COMBAT FEATURES", Color3.fromRGB(255, 100, 100), y)
+    y = self:CreateToggle(TabFrame, "Kill Aura", Features.KillAura, y)
+    y = self:CreateSlider(TabFrame, "Range", 5, 50, Features.KillAura.Range, function(val) Features.KillAura.Range = val end, y)
+    y = self:CreateSlider(TabFrame, "Delay", 0.01, 0.5, Features.KillAura.Delay, function(val) Features.KillAura.Delay = val end, y)
+    y = self:CreateDropdown(TabFrame, "Mode", {"Normal", "Silent", "Reach"}, Features.KillAura.Mode, function(val) Features.KillAura.Mode = val:lower() end, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "AIM ASSISTANCE", Color3.fromRGB(100, 255, 150), y)
+    y = self:CreateToggle(TabFrame, "Silent Aim", Features.SilentAim, y)
+    y = self:CreateSlider(TabFrame, "FOV Circle", 5, 50, Features.SilentAim.FOV, function(val) Features.SilentAim.FOV = val end, y)
+    y = self:CreateSlider(TabFrame, "Hit Chance %", 0, 100, Features.SilentAim.HitChance, function(val) Features.SilentAim.HitChance = val end, y)
+    y = self:CreateDropdown(TabFrame, "Target Part", {"Head", "Torso", "Random"}, Features.SilentAim.TargetPart, function(val) Features.SilentAim.TargetPart = val end, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "COMBAT MODIFIERS", Color3.fromRGB(255, 200, 100), y)
+    y = self:CreateToggle(TabFrame, "Reach Hack", Features.ReachHack, y)
+    y = self:CreateSlider(TabFrame, "Reach Distance", 5, 100, Features.ReachHack.Reach, function(val) Features.ReachHack.Reach = val end, y)
+    y = self:CreateToggle(TabFrame, "No Cooldown", Features.NoCooldown, y)
+    y = self:CreateToggle(TabFrame, "One Shot Kill", Features.OneShotKill, y)
+    
+    self.Tabs["Combat"] = TabFrame
+end
+
+function GUI:CreateMovementTab()
+    local TabFrame = Instance.new("ScrollingFrame")
+    TabFrame.Name = "MovementContent"
+    TabFrame.Size = UDim2.new(1, 0, 1, 0)
+    TabFrame.ScrollBarThickness = 3
+    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 900)
+    TabFrame.BackgroundTransparency = 1
+    TabFrame.Visible = false
+    TabFrame.Parent = self.ContentArea
+    
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 2)
+    Layout.Parent = TabFrame
+    
+    local y = 5
+    
+    y = self:SectionHeader(TabFrame, "MOVEMENT SPEED", Color3.fromRGB(100, 200, 255), y)
+    y = self:CreateToggle(TabFrame, "Speed Hack", Features.SpeedHack, y)
+    y = self:CreateSlider(TabFrame, "Speed Multiplier", 1.1, 5, Features.SpeedHack.Speed, function(val) Features.SpeedHack.Speed = val end, y)
+    y = self:CreateDropdown(TabFrame, "Method", {"Velocity", "CFrame", "Stepper"}, Features.SpeedHack.Method, function(val) Features.SpeedHack.Method = val:lower() end, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "JUMP MODIFICATION", Color3.fromRGB(150, 255, 150), y)
+    y = self:CreateToggle(TabFrame, "Jump Power", Features.JumpPower, y)
+    y = self:CreateSlider(TabFrame, "Jump Power", 50, 300, Features.JumpPower.Power, function(val) Features.JumpPower.Power = val end, y)
+    y = self:CreateToggle(TabFrame, "Infinite Jump", Features.JumpPower, y)
+    y = self:CreateSlider(TabFrame, "Extra Jumps", 1, 20, Features.JumpPower.ExtraJumps, function(val) Features.JumpPower.ExtraJumps = math.floor(val) end, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "BUILDING AIDS", Color3.fromRGB(255, 180, 100), y)
+    y = self:CreateToggle(TabFrame, "Auto Scaffold", Features.AutoScaffold, y)
+    y = self:CreateToggle(TabFrame, "Tower Mode", Features.AutoScaffold, y)
+    y = self:CreateToggle(TabFrame, "Expand Mode", Features.AutoScaffold, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "SAFETY", Color3.fromRGB(255, 100, 200), y)
+    y = self:CreateToggle(TabFrame, "Anti-Void", Features.AntiVoid, y)
+    y = self:CreateToggle(TabFrame, "No Fall Damage", Features.NoFallDamage, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "FLIGHT & SPECIAL", Color3.fromRGB(200, 150, 255), y)
+    y = self:CreateToggle(TabFrame, "Flight [" .. tostring(Flight.Keybind.Name) .. "]", Features.Flight, y)
+    y = self:CreateSlider(TabFrame, "Fly Speed", 20, 200, Features.Flight.Speed, function(val) Features.Flight.Speed = val end, y)
+    y = self:CreateDropdown(TabFrame, "Method", {"CFrame", "Velocity", "Gravity"}, Features.Flight.Method, function(val) Features.Flight.Method = val:lower() end, y)
+    y = self:CreateToggle(TabFrame, "Spider/Climb", Features.Spider, y)
+    
+    self.Tabs["Movement"] = TabFrame
+end
+
+function GUI:CreateVisualsTab()
+    local TabFrame = Instance.new("ScrollingFrame")
+    TabFrame.Name = "VisualsContent"
+    TabFrame.Size = UDim2.new(1, 0, 1, 0)
+    TabFrame.ScrollBarThickness = 3
+    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 850)
+    TabFrame.BackgroundTransparency = 1
+    TabFrame.Visible = false
+    TabFrame.Parent = self.ContentArea
+    
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 2)
+    Layout.Parent = TabFrame
+    
+    local y = 5
+    
+    y = self:SectionHeader(TabFrame, "ESP (ENTITY INFO)", Color3.fromRGB(255, 100, 150), y)
+    y = self:CreateToggle(TabFrame, "Player ESP", Features.ESP, y)
+    y = self:CreateToggle(TabFrame, "Box ESP", Features.ESP, y)
+    y = self:CreateToggle(TabFrame, "Name ESP", Features.ESP, y)
+    y = self:CreateToggle(TabFrame, "Health ESP", Features.ESP, y)
+    y = self:CreateToggle(TabFrame, "Distance ESP", Features.ESP, y)
+    y = self:CreateToggle(TabFrame, "Tracer Lines", Features.Tracers, y)
+    y = self:CreateToggle(TabFrame, "Chams (Wallhack)", Features.Chams, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "BED/OBJECT ESP", Color3.fromRGB(255, 200, 50), y)
+    y = self:CreateToggle(TabFrame, "Bed ESP", Features.BedESP, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "AIMBOT VISUALS", Color3.fromRGB(100, 255, 200), y)
+    y = self:CreateToggle(TabFrame, "FOV Circle", Features.FOVCircle, y)
+    
+    self.Tabs["Visuals"] = TabFrame
+end
+
+function GUI:CreateUtilityTab()
+    local TabFrame = Instance.new("ScrollingFrame")
+    TabFrame.Name = "UtilityContent"
+    TabFrame.Size = UDim2.new(1, 0, 1, 0)
+    TabFrame.ScrollBarThickness = 3
+    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 600)
+    TabFrame.BackgroundTransparency = 1
+    TabFrame.Visible = false
+    TabFrame.Parent = self.ContentArea
+    
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 2)
+    Layout.Parent = TabFrame
+    
+    local y = 5
+    
+    y = self:SectionHeader(TabFrame, "AUTOMATION", Color3.fromRGB(100, 255, 150), y)
+    y = self:CreateToggle(TabFrame, "Auto Heal", Features.AutoHeal, y)
+    y = self:CreateSlider(TabFrame, "Heal at HP %", 10, 80, Features.AutoHeal.HealthPercent, function(val) Features.AutoHeal.HealthPercent = val end, y)
+    y = self:CreateToggle(TabFrame, "Auto Buy", Features.AutoBuy, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "ANTI-CHEAT BYPASS", Color3.fromRGB(255, 150, 50), y)
+    y = self:CreateToggle(TabFrame, "Anti-Aim", Features.AntiAim, y)
+    y = self:CreateDropdown(TabFrame, "Pitch Mode", {"Down", "Up", "Jitter", "Spin"}, Features.AntiAim.Pitch, function(val) Features.AntiAim.Pitch = val:lower() end, y)
+    y = self:CreateDropdown(TabFrame, "Yaw Mode", {"Spin", "Backward", "Jitter"}, Features.AntiAim.Yaw, function(val) Features.AntiAim.Yaw = val:lower() end, y)
+    
+    y = y + 10
+    y = self:SectionHeader(TabFrame, "CAMERA", Color3.fromRGB(200, 150, 255), y)
+    y = self:CreateToggle(TabFrame, "Free Camera [" .. tostring(FreeCamera.Keybind.Name) .. "]", Features.FreeCamera, y)
+    
+    self.Tabs["Utility"] = TabFrame
+end
+
+function GUI:CreateSettingsTab()
+    local TabFrame = Instance.new("ScrollingFrame")
+    TabFrame.Name = "SettingsContent"
+    TabFrame.Size = UDim2.new(1, 0, 1, 0)
+    TabFrame.ScrollBarThickness = 3
+    TabFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+    TabFrame.CanvasSize = UDim2.new(0, 0, 0, 500)
+    TabFrame.BackgroundTransparency = 1
+    TabFrame.Visible = false
+    TabFrame.Parent = self.ContentArea
+    
+    local Layout = Instance.new("UIListLayout")
+    Layout.Padding = UDim.new(0, 2)
+    Layout.Parent = TabFrame
+    
+    local y = 5
+    
+    y = self:SectionHeader(TabFrame, "CONFIGURATION", Color3.fromRGB(200, 200, 200), y)
+    
+    -- Save Config Button
+    local SaveBtn = Instance.new("TextButton")
+    SaveBtn.Name = "SaveConfig"
+    SaveBtn.Size = UDim2.new(1, -10, 0, 34)
+    SaveBtn.Position = UDim2.new(0, 5, 0, y)
+    SaveBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 80)
+    SaveBtn.BorderSizePixel = 0
+    SaveBtn.Text = "💾 SAVE CONFIGURATION"
+    SaveBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SaveBtn.TextSize = 13
+    SaveBtn.Font = Enum.Font.GothamBold
+    SaveBtn.Parent = TabFrame
+    
+    local SaveCorner = Instance.new("UICorner")
+    SaveCorner.CornerRadius = UDim.new(0, 6)
+    SaveCorner.Parent = SaveBtn
+    
+    SaveBtn.MouseButton1Click:Connect(function()
+        SaveConfig()
+    end)
+    y = y + 40
+    
+    -- Load Config Button
+    local LoadBtn = Instance.new("TextButton")
+    LoadBtn.Name = "LoadConfig"
+    LoadBtn.Size = UDim2.new(1, -10, 0, 34)
+    LoadBtn.Position = UDim2.new(0, 5, 0, y)
+    LoadBtn.BackgroundColor3 = Color3.fromRGB(80, 100, 180)
+    LoadBtn.BorderSizePixel = 0
+    LoadBtn.Text = "📂 LOAD CONFIGURATION"
+    LoadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    LoadBtn.TextSize = 13
+    LoadBtn.Font = Enum.Font.GothamBold
+    LoadBtn.Parent = TabFrame
+    
+    local LoadCorner = Instance.new("UICorner")
+    LoadCorner.CornerRadius = UDim.new(0, 6)
+    LoadCorner.Parent = LoadBtn
+    
+    LoadBtn.MouseButton1Click:Connect(function()
+        LoadConfig()
+    end)
+    y = y + 40
+    
+    -- Panic Button (Disable all)
+    local PanicBtn = Instance.new("TextButton")
+    PanicBtn.Name = "PanicButton"
+    PanicBtn.Size = UDim2.new(1, -10, 0, 34)
+    PanicBtn.Position = UDim2.new(0, 5, 0, y)
+    PanicBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+    PanicBtn.BorderSizePixel = 0
+    PanicBtn.Text = "🚨 PANIC MODE (DISABLE ALL)"
+    PanicBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    PanicBtn.TextSize = 13
+    PanicBtn.Font = Enum.Font.GothamBold
+    PanicBtn.Parent = TabFrame
+    
+    local PanicCorner = Instance.new("UICorner")
+    PanicCorner.CornerRadius = UDim.new(0, 6)
+    PanicCorner.Parent = PanicBtn
+    
+    PanicBtn.MouseButton1Click:Connect(function()
+        PanicMode()
+    end)
+    y = y + 50
+    
+    -- Keybinds Info
+    y = self:SectionHeader(TabFrame, "KEYBINDS", Color3.fromRGB(255, 220, 100), y)
+    
+    local Keybinds = {
+        {"Insert", "Toggle GUI"},
+        {"F", "Toggle Flight"},
+        {"P", "Free Camera"},
+        {"H", "Manual Heal"},
+        {"Space (Hold)", "Infinite Jump"},
+        {"Delete", "Panic Mode"}
+    }
+    
+    for _, bind in pairs(Keybinds) do
+        local BindLabel = Instance.new("TextLabel")
+        BindLabel.Size = UDim2.new(1, -10, 0, 22)
+        BindLabel.Position = UDim2.new(0, 5, 0, y)
+        BindLabel.BackgroundTransparency = 1
+        BindLabel.Text = "  [" .. bind[1] .. "]  →  " .. bind[2]
+        BindLabel.TextColor3 = Color3.fromRGB(170, 170, 190)
+        BindLabel.TextSize = 12
+        BindLabel.Font = Enum.Font.Code
+        BindLabel.TextXAlignment = Enum.TextXAlignment.Left
+        BindLabel.Parent = TabFrame
+        y = y + 24
+    end
+    
+    y = y + 15
+    y = self:SectionHeader(TabFrame, "ABOUT", Color3.fromRGB(140, 140, 140), y)
+    
+    local AboutText = Instance.new("TextLabel")
+    AboutText.Size = UDim2.new(1, -10, 0, 80)
+    AboutText.Position = UDim2.new(0, 5, 0, y)
+    AboutText.BackgroundTransparency = 1
+    AboutText.Text = 
+        ScriptInfo.Name .. " v" .. ScriptInfo.Version .. "\n" ..
+        "Type: " .. ScriptInfo.Type .. "\n" ..
+        "Executor: Universal Compatible\n" ..
+        "Game: Easy.gg Bedwars\n" ..
+        "API: Client-Side Exploitation"
+    AboutText.TextColor3 = Color3.fromRGB(130, 130, 150)
+    AboutText.TextSize = 11
+    AboutText.Font = Enum.Font.Code
+    AboutText.TextXAlignment = Enum.TextXAlignment.Left
+    AboutText.TextYAlignment = Enum.TextYAlignment.Top
+    AboutText.Parent = TabFrame
+    
+    self.Tabs["Settings"] = TabFrame
+end
+
+-- ============================================
+-- PHẦN 5: FEATURE IMPLEMENTATIONS (CLIENT-SIDE)
+-- ============================================
+
+-- KILL AURA IMPLEMENTATION
+local KillAuraConnection = nil
+
+function StartKillAura()
+    if KillAuraConnection then return end
+    
+    KillAuraConnection = RunService.RenderStepped:Connect(function()
+        if not Features.KillAura.Enabled then return end
+        
+        local myChar = GetCharacter(LocalPlayer)
+        local myRoot = GetRootPart(myChar)
+        if not myRoot then return end
+        
+        local myPos = myRoot.Position
+        
+        -- Find enemies in range
+        for _, player in pairs(GetAllPlayers()) do
+            if IsAlive(player) and not IsTeammate(player) then
+                local enemyPos = GetPosition(player)
+                if enemyPos then
+                    local dist = Distance(myPos, enemyPos)
+                    
+                    if dist <= Features.KillAura.Range then
+                        -- Check wall
+                        if Features.KillAura.ThroughWalls or HasLineOfSight(enemyPos) then
+                            -- Attack using different modes
+                            if Features.KillAura.Mode == "reach" then
+                                -- Extend reach by manipulating tool range
+                                pcall(function()
+                                    local tool = myChar:FindFirstChildOfClass("Tool")
+                                    if tool then
+                                        local origRange = tool.Range or 3
+                                        tool.Range = Features.KillAura.Range
+                                    end
+                                end)
+                            elseif Features.KillAura.Mode == "silent" then
+                                -- Fire damage remote directly
+                                local damageRemote = FindRemote("damage") or FindRemote("attack") or FindRemote("hit")
+                                if damageRemote then
+                                    SafeFire(damageRemote, player, {
+                                        Position = enemyPos,
+                                        Damage = Features.OneShotKill.Enabled and Features.OneShotKill.Damage or 10
+                                    })
+                                end
+                            else
+                                -- Normal mode: simulate click/tap
+                                VirtualInputManager:SendMouseWheelEvent(0, 0, true)
+                                task.wait(0.05)
+                                VirtualInputManager:SendMouseWheelEvent(0, 0, false)
+                            end
+                            
+                            CurrentTarget = player
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+function StopKillAura()
+    if KillAuraConnection then
+        KillAuraConnection:Disconnect()
+        KillAuraConnection = nil
+    end
+    CurrentTarget = nil
+end
+
+-- SILENT AIM IMPLEMENTATION
+local SilentAimHook = nil
+local FOVDrawing = nil
+
+function StartSilentAim()
+    -- Create FOV circle drawing
+    if Features.SilentAim.ShowFOV or Features.FOVCircle.Enabled then
+        FOVDrawing = Drawing.new("Circle")
+        FOVDrawing.Radius = Features.SilentAim.FOV
+        FOVDrawing.Color = Features.FOVCircle.Color or Color3.fromRGB(255, 255, 255)
+        FOVDrawing.Thickness = 1
+        FOVDrawing.Transparency = Features.FOVCircle.Transparency or 0.5
+        FOVDrawing.Visible = true
+        FOVDrawing.NumPoints = 64
+        FOVDrawing.Filled = Features.FOVCircle.Filled or false
+    end
+    
+    -- Hook raycast/aim methods
+    pcall(function()
+        local oldRaycast = workspace.Raycast
+        Hooks.OldRaycast = oldRaycast
+        
+        SilentAimHook = hookmeta(workspace, "__index", function(self, index, ...)
+            if index == "Raycast" and Features.SilentAim.Enabled then
+                local target, hitPos = GetNearestToCrosshair(Features.SilentAim.FOV)
+                
+                if target and (math.random(1, 100) <= Features.SilentAim.HitChance) then
+                    -- Return modified raycast result pointing to target
+                    local origin = Camera.CFrame.Position
+                    local direction = (hitPos - origin).Unit
+                    
+                    return {
+                        Position = hitPos,
+                        Instance = GetCharacter(target):FindFirstChild(Features.SilentAim.TargetPart) or GetRootPart(GetCharacter(target)),
+                        Material = Enum.Material.Plastic,
+                        Normal = -direction
+                    }
+                end
+            end
+            
+            return oldRaycast(self, index, ...)
+        end)
+    end)
+    
+    -- Update FOV circle position
+    table.insert(Connections, RunService.RenderStepped:Connect(function()
+        if FOVDrawing and (Features.SilentAim.ShowFOV or Features.FOVCircle.Enabled) then
+            FOVDrawing.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+            FOVDrawing.Radius = Features.SilentAim.FOV
+            FOVDrawing.Visible = Features.SilentAim.Enabled or Features.FOVCircle.Enabled
+        end
+    end))
+end
+
+function StopSilentAim()
+    -- Restore original raycast
+    if SilentAimHook and Hooks.OldRaycast then
+        pcall(function()
+            hookmeta(workspace, "__index", Hooks.OldRaycast)
+        end)
+        SilentAimHook = nil
+    end
+    
+    -- Remove FOV drawing
+    if FOVDrawing then
+        FOVDrawing:Remove()
+        FOVDrawing = nil
+    end
+end
+
+-- ESP IMPLEMENTATION (Drawing API - CLIENT SIDE ONLY)
+local ESPDrawings = {}
+
+function StartESP()
+    -- Clear existing drawings first
+    StopESP()
+    
+    table.insert(Connections, RunService.RenderStepped:Connect(function()
+        if not Features.ESP.Enabled then return end
+        
+        for _, player in pairs(GetAllPlayers()) do
+            if IsAlive(player) then
+                local char = GetCharacter(player)
+                local root = GetRootPart(char)
+                
+                if root then
+                    local screenPos, onScreen = WorldToScreen(root.Position)
+                    
+                    if onScreen and screenPos then
+                        local dist = Distance(GetPosition(LocalPlayer), root.Position)
+                        
+                        if dist <= Features.ESP.MaxDistance then
+                            local isEnemy = not IsTeammate(player)
+                            local color = isEnemy and Features.ESP.EnemyColor or Features.ESP.TeamColor
+                            
+                            -- Create/get drawings for this player
+                            if not ESPDrawings[player.UserId] then
+                                ESPDrawings[player.UserId] = {
+                                    Box = Drawing.new("Square"),
+                                    Name = Drawing.new("Text"),
+                                    Health = Drawing.new("Text"),
+                                    Dist = Drawing.new("Text"),
+                                    Tracer = Drawing.new("Line")
+                                }
+                                
+                                -- Configure box
+                                local box = ESPDrawings[player.UserId].Box
+                                box.Thickness = 1
+                                box.Filled = false
+                                box.Color = color
+                                
+                                -- Configure name
+                                local name = ESPDrawings[player.UserId].Name
+                                name.Size = Features.ESP.TextSize
+                                name.Center = true
+                                name.Outline = true
+                                name.Color = color
+                                
+                                -- Configure health
+                                local health = ESPDrawings[player.UserId].Health
+                                health.Size = Features.ESP.TextSize - 2
+                                health.Center = true
+                                health.Outline = true
+                                health.Color = Color3.fromRGB(50, 255, 50)
+                                
+                                -- Configure distance
+                                local distTxt = ESPDrawings[player.UserId].Dist
+                                distTxt.Size = Features.ESP.TextSize - 2
+                                distTxt.Center = true
+                                distTxt.Outline = true
+                                distTxt.Color = Color3.fromRGB(200, 200, 200)
+                                
+                                -- Configure tracer
+                                local tracer = ESPDrawings[player.UserId].Tracer
+                                tracer.Thickness = Features.Tracers.Thickness or 1
+                                tracer.Color = Features.Tracers.Color or Color3.fromRGB(255, 255, 255)
+                            end
+                        
+                            local drawings = ESPDrawings[player.UserId]
+                            local human = GetHumanoid(char)
+                            
+                            -- Calculate box size based on distance
+                            local scaleFactor = 1 / (dist * 0.001)
+                            local boxHeight = 4 * scaleFactor
+                            local boxWidth = 3 * scaleFactor
+                            
+                            -- Update box
+                            if Features.ESP.Box then
+                                drawings.Box.Position = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y - boxHeight/2)
+                                drawings.Box.Size = Vector2.new(boxWidth, boxHeight)
+                                drawings.Box.Color = color
+                                drawings.Box.Visible = true
+                            else
+                                drawings.Box.Visible = false
+                            end
+                            
+                            -- Update name
+                            if Features.ESP.Name then
+                                drawings.Name.Position = Vector2.new(screenPos.X, screenPos.Y - boxHeight/2 - 15)
+                                drawings.Name.Text = player.Name
+                                drawings.Name.Color = color
+                                drawings.Name.Visible = true
+                            else
+                                drawings.Name.Visible = false
+                            end
+                            
+                            -- Update health
+                            if Features.ESP.Health and human then
+                                drawings.Health.Position = Vector2.new(screenPos.X, screenPos.Y + boxHeight/2 + 2)
+                                drawings.Health.Text = "HP: " .. math.floor(human.Health)
+                                drawings.Health.Visible = true
+                            else
+                                drawings.Health.Visible = false
+                            end
+                            
+                            -- Update distance
+                            if Features.ESP.Distance then
+                                drawings.Dist.Position = Vector2.new(screenPos.X, screenPos.Y + boxHeight/2 + 16)
+                                drawings.Dist.Text = "[" .. math.floor(dist) .. "m]"
+                                drawings.Dist.Visible = true
+                            else
+                                drawings.Dist.Visible = false
+                            end
+                            
+                            -- Update tracer
+                            if Features.Tracers.Enabled then
+                                local fromY = Camera.ViewSize.Y
+                                if Features.Tracers.From == "center" then
+                                    fromY = Camera.ViewSize.Y / 2
+                                elseif Features.Tracers.From == "top" then
+                                    fromY = 0
+                                end
+                                
+                                drawings.Tracer.From = Vector2.new(Camera.ViewSize.X / 2, fromY)
+                                drawings.Tracer.To = screenPos
+                                drawings.Tracer.Visible = true
+                            else
+                                drawings.Tracer.Visible = false
+                            end
+                        else
+                            -- Too far, hide
+                            self:HidePlayerESP(player.UserId)
+                        end
+                    else
+                        -- Off screen, hide
+                        self:HidePlayerESP(player.UserId)
+                    end
+                else
+                    self:HidePlayerESP(player.UserId)
+                end
+            else
+                self:HidePlayerESP(player.UserId)
+            end
+        end
+    end))
+end
+
+function StopESP()
+    -- Remove all ESP drawings
+    for userId, drawings in pairs(ESPDrawings) do
+        for _, drawing in pairs(drawings) do
+            if typeof(drawing) == "table" and drawing.Remove then
+                drawing:Remove()
+            end
+        end
+    end
+    ESPDrawings = {}
+end
+
+function GUI:HidePlayerESP(userId)
+    if ESPDrawings[userId] then
+        for _, drawing in pairs(ESPDrawings[userId]) do
+            drawing.Visible = false
+        end
+    end
+end
+
+-- AUTO SCAFFOLD IMPLEMENTATION
+local ScaffoldConnection = nil
+
+function StartAutoScaffold()
+    ScaffoldConnection = RunService.RenderStepped:Connect(function()
+        if not Features.AutoScaffold.Enabled then return end
+        
+        local myChar = GetCharacter(LocalPlayer)
+        local myRoot = GetRootPart(myChar)
+        if not myRoot then return end
+        
+        local pos = myRoot.Position
+        local belowPos = Vector3.new(pos.X, pos.Y - 3, pos.Z)
+        
+        -- Check if there's no block below
+        local params = RaycastParams.new()
+        params.FilterDescendantsInstances = {myChar}
+        params.FilterType = Enum.RaycastFilterType.Blacklist
+        
+        local result = workspace:Raycast(pos, Vector3.new(0, -5, 0), params)
+        
+        if not result or (result.Position - pos).Magnitude > 4 then
+            -- Place block below
+            local placeRemote = FindRemote("placeBlock") or FindRemote("build") or FindRemote("block")
+            if placeRemote then
+                SafeFire(placeRemote, belowPos)
+            end
+            
+            -- Tower mode: stack blocks upward when looking down
+            if Features.AutoScaffold.TowerMode then
+                local lookDir = Camera.CFrame.LookVector
+                if lookDir.Y < -0.7 then -- Looking mostly downward
+                    local towerPos = Vector3.new(pos.X, pos.Y + 2, pos.Z)
+                    SafeFire(placeRemote, towerPos)
+                end
+            end
+            
+            -- Expand mode: place blocks around
+            if Features.AutoScaffold.ExpandMode then
+                local offsets = {
+                    Vector3.new(3, 0, 0),
+                    Vector3.new(-3, 0, 0),
+                    Vector3.new(0, 0, 3),
+                    Vector3.new(0, 0, -3)
+                }
+                
+                for _, offset in pairs(offsets) do
+                    local expandPos = pos + offset
+                    SafeFire(placeRemote, expandPos)
+                end
+            end
+        end
+    end)
+end
+
+function StopAutoScaffold()
+    if ScaffoldConnection then
+        ScaffoldConnection:Disconnect()
+        ScaffoldConnection = nil
+    end
+end
+
+-- ANTI-VOID IMPLEMENTATION
+local AntiVoidConnection = nil
+
+function StartAntiVoid()
+    AntiVoidConnection = RunService.RenderStepped:Connect(function()
+        if not Features.AntiVoid.Enabled then return end
+        
+        local myChar = GetCharacter(LocalPlayer)
+        local myRoot = GetRootPart(myChar)
+        if not myRoot then return end
+        
+        local pos = myRoot.Position
+        
+        if pos.Y < Features.AntiVoid.YLevel then
+            if Features.AntiVoid.Method == "teleport" or Features.AntiVoid.Method == "both" then
+                -- Teleport to safe position
+                pcall(function()
+                    myRoot.CFrame = CFrame.new(Vector3.new(pos.X, 100, pos.Z))
+                end)
+            end
+            
+            if Features.AntiVoid.Method == "place" or Features.AntiVoid.Method == "both" then
+                -- Place block under feet
+                local placeRemote = FindRemote("placeBlock") or FindRemote("build")
+                if placeRemote then
+                    SafeFire(placeRemote, Vector3.new(pos.X, pos.Y - 2, pos.Z))
+                end
+            end
+            
+            if Features.AntiVoid.ResetOnTrigger then
+                -- Optional: reset character if stuck
+                -- LocalPlayer:LoadCharacter()
+            end
+        end
+    end)
+end
+
+function StopAntiVoid()
+    if AntiVoidConnection then
+        AntiVoidConnection:Disconnect()
+        AntiVoidConnection = nil
+    end
+end
+
+-- FLIGHT IMPLEMENTATION
+local FlightConnection = nil
+local FlyBodyVelocity = nil
+local FlyBodyGyro = nil
+
+function StartFlight()
+    local myChar = GetCharacter(LocalPlayer)
+    local myRoot = GetRootPart(myChar)
+    if not myRoot then return end
+    
+    -- Create velocity bodymover
+    FlyBodyVelocity = Instance.new("BodyVelocity")
+    FlyBodyVelocity.Name = "ScriptFlyVel"
+    FlyBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    FlyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    FlyBodyVelocity.Parent = myRoot
+    
+    -- Create gyro for control
+    FlyBodyGyro = Instance.new("BodyGyro")
+    FlyBodyGyro.Name = "ScriptFlyGyro"
+    FlyBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    FlyBodyGyro.P = 9e4
+    FlyBodyGyro.Parent = myRoot
+    
+    FlightConnection = RunService.RenderStepped:Connect(function()
+        if not Features.Flight.Enabled then return end
+        
+        local myChar = GetCharacter(LocalPlayer)
+        local myRoot = GetRootPart(myChar)
+        if not myRoot then return end
+        
+        if Features.Flight.Noclip then
+            -- Make character clip through everything
+            for _, part in pairs(myChar:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+        
+        -- Calculate fly direction based on input
+        local camCF = Camera.CFrame
+        local moveVec = Vector3.new(0, 0, 0)
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            moveVec = moveVec + camCF.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            moveVec = moveVec - camCF.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            moveVec = moveVec - camCF.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            moveVec = moveVec + camCF.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            moveVec = moveVec + Vector3.new(0, 1, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            moveVec = moveVec - Vector3.new(0, 1, 0)
+        end
+        
+        -- Apply movement
+        if moveVec.Magnitude > 0 then
+            moveVec = moveVec.Unit * Features.Flight.Speed
+            
+            if Features.Flight.Method == "velocity" and FlyBodyVelocity then
+                FlyBodyVelocity.Velocity = moveVec
+            elseif Features.Flight.Method == "cframe" then
+                myRoot.CFrame = myRoot.CFrame + (moveVec * RunService.Heartbeat:Wait())
+            end
+        else
+            if FlyBodyVelocity then
+                FlyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
+        end
+        
+        if FlyBodyGyro then
+            FlyBodyGyro.CFrame = camCF
+        end
+    end)
+end
+
+function StopFlight()
+    if FlightConnection then
+        FlightConnection:Disconnect()
+        FlightConnection = nil
+    end
+    
+    if FlyBodyVelocity then
+        FlyBodyVelocity:Destroy()
+        FlyBodyVelocity = nil
+    end
+    
+    if FlyBodyGyro then
+        FlyBodyGyro:Destroy()
+        FlyBodyGyro = nil
+    end
+    
+    -- Restore collision
+    local myChar = GetCharacter(LocalPlayer)
+    if myChar then
+        for _, part in pairs(myChar:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+-- ============================================
+-- PHẦN 6: INPUT HANDLING (KEYBINDS)
+-- ============================================
+
+function SetupKeybinds()
+    -- GUI Toggle
+    table.insert(Connections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        
+        if input.KeyCode == GUI.ToggleKey then
+            GUI:Toggle()
+        elseif input.KeyCode == Features.Flight.Keybind then
+            Features.Flight.Enabled = not Features.Flight.Enabled
+            if Features.Flight.Enabled then
+                StartFlight()
+            else
+                StopFlight()
+            end
+        elseif input.KeyCode == Features.FreeCamera.Keybind then
+            Features.FreeCamera.Enabled = not Features.FreeCamera.Enabled
+            -- Free camera implementation would go here
+        elseif input.KeyCode == Features.AutoHeal.HealKey then
+            ManualHeal()
+        elseif input.KeyCode == Enum.KeyCode.Delete then
+            PanicMode()
+        end
+    end))
+    
+    -- Infinite Jump
+    table.insert(Connections, UserInputService.JumpRequest:Connect(function()
+        if Features.JumpPower.InfiniteJump or Features.JumpPower.Enabled then
+            local myChar = GetCharacter(LocalPlayer)
+            local hum = GetHumanoid(myChar)
+            
+            if hum and (not hum.FloorMaterial or hum.FloorMaterial == Enum.Material.Air) then
+                -- Allow extra jumps
+                if JumpsRemaining > 0 or Features.JumpPower.InfiniteJump then
+                    if not Features.JumpPower.InfiniteJump then
+                        JumpsRemaining = JumpsRemaining - 1
+                    end
+                    
+                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            else
+                -- Reset jumps when on ground
+                JumpsRemaining = Features.JumpPower.ExtraJumps
+            end
+        end
+    end))
+    
+    -- Apply jump power change
+    table.insert(Connections, LocalPlayer.CharacterAdded:Connect(function(char)
+        local hum = GetHumanoid(char)
+        if hum then
+            if Features.JumpPower.Enabled then
+                hum.UseJumpPower = true
+                hum.JumpPower = Features.JumpPower.Power
+            end
+        end
+    end))
+end
+
+function ManualHeal()
+    -- Trigger heal manually
+    local healRemote = FindRemote("heal") or FindRemote("useItem") or FindRemote("consume")
+    if healRemote then
+        SafeFire(healRemote, "shears")
+    end
+end
+
+-- ============================================
+-- PHẦN 7: CONFIG SYSTEM
+-- ============================================
+
+function SaveConfig()
+    local config = {
+        Version = ScriptInfo.Version,
+        SavedAt = os.time(),
+        Features = {}
+    }
+    
+    -- Deep copy features (only save enabled states and important values)
+    for featName, featData in pairs(Features) do
+        if type(featData) == "table" and featData.Enabled ~= nil then
+            config.Features[featName] = {
+                Enabled = featData.Enabled,
+                Range = featData.Range,
+                Speed = featData.Speed,
+                Reach = featData.Reach,
+                Power = featData.Power,
+                FOV = featData.FOV
+            }
+        end
+    end
+    
+    -- Write to file (if supported by executor)
+    pcall(function()
+        writefile(ScriptInfo.Name .. "_config.json", game:GetService("HttpService"):JSONEncode(config))
+        print("[Delta] Config saved!")
+    end)
+end
+
+function LoadConfig()
+    pcall(function()
+        if isfile(ScriptInfo.Name .. "_config.json") then
+            local config = game:GetService("HttpService"):JSONDecode(readfile(ScriptInfo.Name .. "_config.json"))
+            
+            if config.Features then
+                for featName, featConfig in pairs(config.Features) do
+                    if Features[featName] then
+                        for key, value in pairs(featConfig) do
+                            Features[featName][key] = value
+                        end
+                    end
+                end
+            end
+            
+            print("[Delta] Config loaded!")
+        end
+    end)
+end
+
+function PanicMode()
+    print("[Delta] PANIC MODE ACTIVATED - Disabling all features...")
+    
+    -- Disable all features
+    for featName, featData in pairs(Features) do
+        if type(featData) == "table" and featData.Enabled ~= nil then
+            featData.Enabled = false
+        end
+    end
+    
+    -- Stop all running systems
+    StopKillAura()
+    StopSilentAim()
+    StopESP()
+    StopAutoScaffold()
+    StopAntiVoid()
+    StopFlight()
+    
+    -- Notify
+    if GUI.StatusText then
+        GUI.StatusText.Text = "PANIC"
+        GUI.StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
+    end
+end
+
+-- ============================================
+-- PHẦN 8: INITIALIZATION
+-- ============================================
+
+function Initialize()
+    print("=" .. string.rep("=", 50))
+    print("[Delta] " .. ScriptInfo.Name .. " v" .. ScriptInfo.Version)
+    print("[Delta] Type: " .. ScriptInfo.Type)
+    print("[Delta] Loading client-side modules...")
+    
+    -- Detect and log executor
+    for name, detected in pairs(ExecutorDetect) do
+        if detected then
+            print("[Delta] Detected executor: " .. name)
+        end
+    end
+    
+    -- Create GUI
+    GUI:Create()
+    
+    -- Setup input handling
+    SetupKeybinds()
+    
+    -- Try to load saved config
+    LoadConfig()
+    
+    -- Initialize jump power if enabled
+    if Features.JumpPower.Enabled then
+        local myChar = GetCharacter(LocalPlayer)
+        local hum = GetHumanoid(myChar)
+        if hum then
+            hum.UseJumpPower = true
+            hum.JumpPower = Features.JumpPower.Power
+        end
+    end
+    
+    print("[Delta] Initialization complete!")
+    print("[Delta] Press " .. tostring(GUI.ToggleKey.Name) .. " to toggle GUI")
+    print("=" .. string.rep("=", 50))
+end
+
+-- RUN
+Initialize()
+
+-- Return module for external access
+return {
+    Features = Features,
+    GUI = GUI,
+    ToggleFeature = function(name, state)
+        if Features[name] then
+            Features[name].Enabled = state
+            GUI:OnFeatureToggled(name, Features[name])
+            return true
+        end
+        return false
+    end,
+    GetFeature = function(name)
+        return Features[name]
+    end,
+    Panic = PanicMode,
+    Reload = Initialize
+}
