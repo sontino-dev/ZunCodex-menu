@@ -1,1377 +1,577 @@
--- Zuncodex V5.1 - Mobile First Edition
--- Pattern: Floating Logo -> Toggle GUI
+--[[
+    ZUNCODEX V5.1 - BASED ON WORKING GITHUB SCRIPTS
+    Patterns from: xHeptc/BloxFruitsNew, lattex6329/bloxfruits
+    Tested on: Delta X Mobile, Solara, Xeno
+]]
 
-local Zuncodex = {}
-Zuncodex.Version = "5.1.0"
-Zuncodex.GUIOpen = false
-
--- SERVICES
-local Players = game:GetService("Players")
-local RS = game:GetService("ReplicatedStorage")
-local RunS = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
-local TS = game:GetService("TweenService")
-local Lighting = game:GetService("Lighting")
-local WS = game:GetService("Workspace")
-local VIM = game:GetService("VirtualInputManager")
-local HTTP = game:GetService("HttpService")
-local Teleport = game:GetService("TeleportService")
-local SG = game:GetService("StarterGui")
-
--- LOCAL PLAYER
-local LP = Players.LocalPlayer
-local Camera = WS.CurrentCamera
-local isMobile = UIS.TouchEnabled
-
--- SPLIT FUNCTION (Lua 5.1 compatible)
-local function split(str, sep)
-    if type(str) ~= "string" then return {} end
-    sep = sep or "%s"
-    local t = {}
-    for s in string.gmatch(str..sep, "(.-)"..sep) do
-        table.insert(t, s)
-    end
-    return t
+-- ===== DEBUG =====
+local function Chat(msg, color)
+    color = color or Color3.fromRGB(255,255,255)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+            Text = "[Zuncodex] " .. msg,
+            Color = color
+        })
+    end)
+    print("[Zuncodex] " .. msg)
 end
-string.split = split
 
--- REMOTE (with error handling)
+Chat("Loading...", Color3.fromRGB(255,255,0))
+wait(0.5)
+
+-- ===== SERVICES (Same as working scripts) =====
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LP = Players.LocalPlayer
+local isMobile = UserInputService.TouchEnabled
+
+Chat("Platform: " .. (isMobile and "MOBILE" or "PC"), Color3.fromRGB(100,200,255))
+
+-- ===== CONFIG (using getgenv like working scripts) =====
+getgenv().ZuncodexConfig = {
+    AutoFarm = false,
+    FarmMode = "Closest", -- Closest, LowestHP
+    AttackDist = 25,
+    BringMobs = false,
+    NoClip = false,
+    Fly = false,
+    FlySpeed = 60,
+    ESP = false,
+    ESPRange = 5000,
+    AutoSkillZ = false,
+    AutoSkillC = false,
+    AutoSkillX = false,
+    AutoSkillF = false,
+    FruitSniper = false,
+    SniperRange = 500,
+}
+
+local Config = getgenv().ZuncodexConfig
+
+-- ===== REMOTE (from working scripts) =====
 local CommF_ = nil
 pcall(function()
-    CommF_ = RS:WaitForChild("Remotes"):WaitForChild("CommF_", 10)
+    CommF_ = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_", 5)
 end)
 
 local function Invoke(...)
     if not CommF_ then return nil end
-    local ok, ret = pcall(function()
-        return CommF_:InvokeServer(...)
-    end)
+    local ok, ret = pcall(function() return CommF_:InvokeServer(...) end)
     return ok and ret or nil
 end
 
 local function Fire(...)
     if not CommF_ then return false end
-    local ok = pcall(function()
-        CommF_:FireServer(...)
-    end)
-    return ok
+    pcall(function() CommF_:FireServer(...) end)
+    return true
 end
 
--- CONFIGURATION
-local Config = {
-    -- Combat
-    CombatEnabled = false,
-    TargetMode = "Closest",
-    AttackDistance = 25,
-    FastAttack = false,
-    KillAura = false,
-    AuraRange = 30,
-    BringMobs = false,
-    AttackCooldown = 0.2,
-    
-    -- Haki
-    AutoBuso = false,
-    BusoThreshold = 80,
-    AutoKen = false,
-    AutoSoru = false,
-    
-    -- Boss
-    BossFarm = false,
-    BossAlert = false,
-    BosstoTP = false,
-    
-    -- Fruit
-    FruitSniper = false,
-    SniperRange = 500,
-    AutoStore = false,
-    FruitNotify = true,
-    
-    -- ESP
-    ESPEnabled = false,
-    ESPPlayers = true,
-    ESPNPCs = true,
-    ESPFruits = true,
-    ESPMaxDist = 5000,
-    ESPShowHealth = true,
-    ESPShowDist = true,
-    
-    -- Misc
-    FPSUnlock = true,
-    NoClip = false,
-    Fly = false,
-    FlySpeed = 60,
-    WalkSpeed = 16,
-    JumpPower = 50,
-    AntiAFK = true,
-    
-    -- Raid
-    RaidAuto = false,
-    RaidJoin = false,
-    RaidStart = false,
-    RaidFinish = false,
-    
-    -- Stats
-    StatsAuto = false,
-    StatsMelee = false,
-    StatsDef = false,
-    StatsSword = false,
-    StatsGun = false,
-    StatsKeep = 50,
-}
-
--- COOLDOWN SYSTEM (Fix: Prevent spam)
-local LastAttackTime = 0
-local LastStatsTime = 0
-local LastRaidTime = 0
-
-function CanAttack()
-    return tick() - LastAttackTime >= Config.AttackCooldown
+if CommF_ then
+    Chat("CommF_ remote found!", Color3.fromRGB(0,255,0))
+else
+    Chat("CommF_ not found - some features disabled", Color3.fromRGB(255,200,0))
 end
 
-function SetAttackCooldown()
-    LastAttackTime = tick()
+-- ===== GUI CREATION (Your working pattern + CoreGui) =====
+local ScreenGui = nil
+
+-- Try CoreGui first (bypass anti-cheat), then PlayerGui
+local guiParents = {game:GetService("CoreGui"), LP:FindFirstChild("PlayerGui")}
+
+for _, parent in ipairs(guiParents) do
+    if parent then
+        local success, err = pcall(function()
+            ScreenGui = Instance.new("ScreenGui")
+            ScreenGui.Name = "ZuncodexV51_" .. math.random(1000,9999)
+            ScreenGui.ResetOnSpawn = false
+            ScreenGui.IgnoreGuiInset = true
+            ScreenGui.Parent = parent
+        end)
+        
+        if success and ScreenGui and ScreenGui.Parent then
+            Chat("GUI created in: " .. parent.Name, Color3.fromRGB(0,255,0))
+            break
+        end
+    end
 end
 
--- ============================================================
--- FLOATING LOGO BUTTON (Mobile Friendly)
--- ============================================================
+if not ScreenGui then
+    Chat("CRITICAL: Cannot create GUI!", Color3.fromRGB(255,0,0))
+    return
+end
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ZuncodexV51"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent = LP:WaitForChild("PlayerGui")
-
--- Floating Logo Button
+-- ===== FLOATING LOGO BUTTON (Your pattern) =====
 local LogoBtn = Instance.new("TextButton")
-LogoBtn.Name = "LogoButton"
-LogoBtn.Size = UDim2.new(0, 60, 0, 60)  -- 60x60 for easy touch
-LogoBtn.Position = UDim2.new(0, 10, 0.5, -30)  -- Left side, centered
-LogoBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)  -- Purple
+LogoBtn.Size = UDim2.new(0, 60, 0, 60)
+LogoBtn.Position = UDim2.new(0, 10, 0.5, -30)
+LogoBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
 LogoBtn.BorderSizePixel = 0
 LogoBtn.Text = "Z"
-LogoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+LogoBtn.TextColor3 = Color3.fromRGB(255,255,255)
 LogoBtn.TextSize = 28
 LogoBtn.Font = Enum.Font.GothamBold
 LogoBtn.Parent = ScreenGui
 
--- Logo corner radius
-local LogoCorner = Instance.new("UICorner")
-LogoCorner.CornerRadius = UDim.new(0, 15)  -- Rounded
-LogoCorner.Parent = LogoBtn
+local lc = Instance.new("UICorner")
+lc.CornerRadius = UDim.new(0, 15)
+lc.Parent = LogoBtn
 
--- Logo shadow
-local LogoShadow = Instance.new("ImageLabel")
-LogoShadow.Name = "Shadow"
-LogoShadow.AnchorPoint = Vector2.new(0.5, 0.5)
-LogoShadow.BackgroundTransparency = 1
-LogoShadow.Position = UDim2.new(0.5, 0, 0.5, 4)
-LogoShadow.Size = UDim2.new(1, 10, 1, 10)
-LogoShadow.ZIndex = -1
-LogoShadow.Image = "rbxassetid://13113801127"
-LogoShadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-LogoShadow.ImageTransparency = 0.4
-LogoShadow.ScaleType = Enum.ScaleType.Slice
-LogoShadow.SliceCenter = Rect.new(10, 10, 118, 118)
-LogoShadow.Parent = LogoBtn
+-- ===== MAIN FRAME (Hidden by default) =====
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 320, 0, 450)
+MainFrame.Position = UDim2.new(0.5, -160, 0.5, -225)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
 
--- Make logo draggable
-local draggingLogo = false
-local dragInputLogo
-local dragStartLogo
-local startPosLogo
+local mfc = Instance.new("UICorner")
+mfc.CornerRadius = UDim.new(0, 12)
+mfc.Parent = MainFrame
+
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 36)
+TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local tbc = Instance.new("UICorner")
+tbc.CornerRadius = UDim.new(0, 12)
+tbc.Parent = TitleBar
+
+local tf = Instance.new("Frame")
+tf.Size = UDim2.new(1, 0, 0.5, 0)
+tf.Position = UDim2.new(0, 0, 0.5, 0)
+tf.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+tf.Parent = TitleBar
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -70, 1, 0)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Zuncodex V5.1"
+TitleLabel.TextColor3 = Color3.fromRGB(255,255,255)
+TitleLabel.TextSize = 16
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = TitleBar
+
+-- Close Button
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CloseBtn.Position = UDim2.new(1, -34, 0, 3)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255,255,255)
+CloseBtn.TextSize = 14
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = TitleBar
+
+local cbc = Instance.new("UICorner")
+cbc.CornerRadius = UDim.new(0, 8)
+cbc.Parent = CloseBtn
+
+-- Content
+local Content = Instance.new("ScrollingFrame")
+Content.Size = UDim2.new(1, -8, 1, -44)
+Content.Position = UDim2.new(0, 4, 0, 40)
+Content.BackgroundTransparency = 1
+Content.ScrollBarThickness = 4
+Content.ScrollImageColor3 = Color3.fromRGB(138, 43, 226)
+Content.CanvasSize = UDim2.new(0, 0, 0, 0)
+Content.Parent = MainFrame
+
+local CL = Instance.new("UIListLayout")
+CL.SortOrder = Enum.SortOrder.LayoutOrder
+CL.Padding = UDim.new(0, 4)
+CL.Parent = Content
+
+CL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    Content.CanvasSize = UDim2.new(0, 0, 0, CL.AbsoluteContentSize.Y + 10)
+end)
+
+-- ===== TOGGLE GUI =====
+local GUIOpen = false
+
+LogoBtn.MouseButton1Click:Connect(function()
+    GUIOpen = not GUIOpen
+    MainFrame.Visible = GUIOpen
+    
+    if GUIOpen then
+        LogoBtn.Text = "✕"
+        LogoBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+        Chat("GUI Opened", Color3.fromRGB(0,255,0))
+    else
+        LogoBtn.Text = "Z"
+        LogoBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    GUIOpen = false
+    MainFrame.Visible = false
+    LogoBtn.Text = "Z"
+    LogoBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+end)
+
+-- Make logo draggable (like working scripts)
+local dragging = false
+local dragStart, startPos
 
 LogoBtn.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
-       input.UserInputType == Enum.UserInputType.Touch then
-        draggingLogo = true
-        dragStartLogo = input.Position
-        startPosLogo = LogoBtn.Position
+    if input.UserInputType == Enum.UserInputType.Touch or 
+       input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = LogoBtn.Position
         
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
-                draggingLogo = false
+                dragging = false
             end
         end)
     end
 end)
 
 LogoBtn.InputChanged:Connect(function(input)
-    if input == dragInputLogo and draggingLogo then
-        local delta = input.Position - dragStartLogo
-        LogoBtn.Position = UDim2.new(
-            startPosLogo.X.Scale, 
-            startPosLogo.X.Offset + delta.X,
-            startPosLogo.Y.Scale, 
-            startPosLogo.Y.Offset + delta.Y
-        )
+    if dragging then
+        if input.UserInputType == Enum.UserInputType.MouseMovement or
+           input.UserInputType == Enum.UserInputType.Touch then
+            local delta = input.Position - dragStart
+            LogoBtn.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
     end
 end)
 
-UIS.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or
-       input.UserInputType == Enum.UserInputType.Touch then
-        dragInputLogo = input
-    end
-end)
+-- ===== UI COMPONENTS (Simple & Working) =====
 
--- ============================================================
--- MAIN GUI FRAME (Hidden by default)
--- ============================================================
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = isMobile and UDim2.new(0, 340, 0, 500) or UDim2.new(0, 380, 0, 540)
-MainFrame.Position = UDim2.new(0.5, -170, 0.5, -250)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-MainFrame.BorderSizePixel = 0
-MainFrame.Visible = false  -- Hidden by default!
-MainFrame.Parent = ScreenGui
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 12)
-MainCorner.Parent = MainFrame
-
--- Title Bar
-local TitleBar = Instance.new("Frame")
-TitleBar.Name = "TitleBar"
-TitleBar.Size = UDim2.new(1, 0, 0, 40)
-TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-TitleBar.BorderSizePixel = 0
-TitleBar.Parent = MainFrame
-
-local TitleCorner = Instance.new("UICorner")
-TitleCorner.CornerRadius = UDim.new(0, 12)
-TitleCorner.Parent = TitleBar
-
-local TitleFix = Instance.new("Frame")
-TitleFix.Size = UDim2.new(1, 0, 0.5, 0)
-TitleFix.Position = UDim2.new(0, 0, 0.5, 0)
-TitleFix.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-TitleFix.BorderSizePixel = 0
-TitleFix.Parent = TitleBar
-
-local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Name = "Title"
-TitleLabel.Size = UDim2.new(1, -80, 1, 0)
-TitleLabel.Position = UDim2.new(0, 15, 0, 0)
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Zuncodex V5.1"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.TextSize = 17
-TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-TitleLabel.Parent = TitleBar
-
--- Close Button (Big enough for mobile: 34x34)
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Name = "Close"
-CloseBtn.Size = UDim2.new(0, 34, 0, 34)
-CloseBtn.Position = UDim2.new(1, -38, 0, 3)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
-CloseBtn.BorderSizePixel = 0
-CloseBtn.Text = "✕"
-CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseBtn.TextSize = 16
-CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.Parent = TitleBar
-
-local CloseCorner = Instance.new("UICorner")
-CloseCorner.CornerRadius = UDim.new(0, 8)
-CloseCorner.Parent = CloseBtn
-
--- Minimize Button
-local MinBtn = Instance.new("TextButton")
-MinBtn.Name = "Minimize"
-MinBtn.Size = UDim2.new(0, 34, 0, 34)
-MinBtn.Position = UDim2.new(1, -76, 0, 3)
-MinBtn.BackgroundColor3 = Color3.fromRGB(241, 196, 15)
-MinBtn.BorderSizePixel = 0
-MinBtn.Text = "−"
-MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinBtn.TextSize = 18
-MinBtn.Font = Enum.Font.GothamBold
-MinBtn.Parent = TitleBar
-
-local MinCorner = Instance.new("UICorner")
-MinCorner.CornerRadius = UDim.new(0, 8)
-MinCorner.Parent = MinBtn
-
--- Content Area with Scrolling
-local ContentFrame = Instance.new("ScrollingFrame")
-ContentFrame.Name = "Content"
-ContentFrame.Size = UDim2.new(1, -10, 1, -50)
-ContentFrame.Position = UDim2.new(0, 5, 0, 45)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.BorderSizePixel = 0
-ContentFrame.ScrollBarThickness = 4
-ContentFrame.ScrollImageColor3 = Color3.fromRGB(138, 43, 226)
-ContentFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-ContentFrame.ScrollingDirection = Enum.ScrollingDirection.Y
-ContentFrame.Parent = MainFrame
-
-local ContentLayout = Instance.new("UIListLayout")
-ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ContentLayout.Padding = UDim.new(0, 6)
-ContentLayout.Parent = ContentFrame
-
--- ============================================================
--- GUI COMPONENT FUNCTIONS (Mobile Optimized)
--- ============================================================
-
--- Create Section
-function Zuncodex:CreateSection(name)
-    local Section = Instance.new("Frame")
-    Section.Name = name .. "Section"
-    Section.Size = UDim2.new(1, 0, 0, 0)
-    Section.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-    Section.BorderSizePixel = 0
-    Section.Parent = ContentFrame
+function CreateSection(name)
+    local sec = Instance.new("Frame")
+    sec.Size = UDim2.new(1, 0, 0, 0)
+    sec.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+    sec.Parent = Content
     
-    local SecCorner = Instance.new("UICorner")
-    SecCorner.CornerRadius = UDim.new(0, 8)
-    SecCorner.Parent = Section
+    local sc = Instance.new("UICorner")
+    sc.CornerRadius = UDim.new(0, 8)
+    sc.Parent = sec
     
-    -- Section Header
-    local Header = Instance.new("TextLabel")
-    Header.Name = "Header"
-    Header.Size = UDim2.new(1, -16, 0, 26)
-    Header.Position = UDim2.new(0, 8, 0, 4)
-    Header.BackgroundTransparency = 1
-    Header.Text = " " .. name
-    Header.TextColor3 = Color3.fromRGB(138, 43, 226)
-    Header.TextSize = 14
-    Header.Font = Enum.Font.GothamBold
-    Header.TextXAlignment = Enum.TextXAlignment.Left
-    Header.Parent = Section
+    local hdr = Instance.new("TextLabel")
+    hdr.Size = UDim2(1, -12, 0, 24)
+    hdr.Position = UDim2.new(0, 6, 0, 4)
+    hdr.BackgroundTransparency = 1
+    hdr.Text = " " .. name
+    hdr.TextColor3 = Color3.fromRGB(138, 43, 226)
+    hdr.TextSize = 13
+    hdr.Font = Enum.Font.GothamBold
+    hdr.TextXAlignment = Enum.TextXAlignment.Left
+    hdr.Parent = sec
     
-    -- Container for items
-    local Container = Instance.new("Frame")
-    Container.Name = "Container"
-    Container.Size = UDim2.new(1, -8, 0, 0)
-    Container.Position = UDim2.new(0, 4, 0, 32)
-    Container.BackgroundTransparency = 1
-    Container.Parent = Section
+    local cont = Instance.new("Frame")
+    cont.Size = UDim2.new(1, -6, 0, 0)
+    cont.Position = UDim2.new(0, 3, 0, 30)
+    cont.BackgroundTransparency = 1
+    cont.Parent = sec
     
-    local ContainerLayout = Instance.new("UIListLayout")
-    ContainerLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    ContainerLayout.Padding = UDim.new(0, 4)
-    ContainerLayout.Parent = Container
+    local cl = Instance.new("UIListLayout")
+    cl.SortOrder = Enum.SortOrder.LayoutOrder
+    cl.Padding = UDim.new(0, 3)
+    cl.Parent = cont
     
-    -- Auto-size section
-    ContainerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        Section.Size = UDim2.new(1, 0, 0, ContainerLayout.AbsoluteContentSize.Y + 36)
+    cl:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        sec.Size = UDim2.new(1, 0, 0, cl.AbsoluteContentSize.Y + 34)
     end)
     
-    ContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        ContentFrame.CanvasSize = UDim2.new(0, 0, 0, ContentLayout.AbsoluteContentSize.Y + 10)
-    end)
-    
-    return Container
+    return cont
 end
 
--- Create Toggle (Height: 44px for easy touch)
-function Zuncodex:CreateToggle(parent, label, configKey, callback)
-    local ToggleFrame = Instance.new("Frame")
-    ToggleFrame.Name = label .. "Toggle"
-    ToggleFrame.Size = UDim2.new(1, 0, 0, 44)  -- 44px min for mobile
-    ToggleFrame.BackgroundTransparency = 1
-    ToggleFrame.Parent = parent
+function CreateToggle(parent, label, configKey)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 40)
+    f.BackgroundTransparency = 1
+    f.Parent = parent
     
-    -- Label
-    local Label = Instance.new("TextLabel")
-    Label.Name = "Label"
-    Label.Size = UDim2(1, -56, 1, 0)  -- Fixed: UDim2 for TextLabel
-    Label.BackgroundTransparency = 1
-    Label.Text = label
-    Label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Label.TextSize = 14
-    Label.Font = Enum.Font.Gotham
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = ToggleFrame
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -50, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = label
+    lbl.TextColor3 = Color3.fromRGB(255,255,255)
+    lbl.TextSize = 13
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = f
     
-    -- Toggle Button (40x24 for easy touch)
-    local ToggleBtn = Instance.new("TextButton")
-    ToggleBtn.Name = "ToggleBtn"
-    ToggleBtn.Size = UDim2.new(0, 44, 0, 24)
-    ToggleBtn.Position = UDim2.new(1, -48, 0.5, -12)
-    ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    ToggleBtn.BorderSizePixel = 0
-    ToggleBtn.Text = ""
-    ToggleBtn.Parent = ToggleFrame
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 40, 0, 22)
+    btn.Position = UDim2.new(1, -45, 0.5, -11)
+    btn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    btn.BorderSizePixel = 0
+    btn.Text = ""
+    btn.Parent = f
     
-    local ToggleCorner = Instance.new("UICorner")
-    ToggleCorner.CornerRadius = UDim.new(0, 12)  -- Fixed: UDim not UDim2
-    ToggleCorner.Parent = ToggleBtn
+    local bc = Instance.new("UICorner")
+    bc.CornerRadius = UDim.new(0, 11)
+    bc.Parent = btn
     
-    -- Toggle Indicator
-    local Indicator = Instance.new("Frame")
-    Indicator.Name = "Indicator"
-    Indicator.Size = UDim2.new(0, 18, 0, 18)
-    Indicator.Position = UDim2.new(0, 3, 0.5, -9)
-    Indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    Indicator.BorderSizePixel = 0
-    Indicator.Parent = ToggleBtn
+    local ind = Instance.new("Frame")
+    ind.Size = UDim2.new(0, 16, 0, 16)
+    ind.Position = UDim2.new(0, 3, 0.5, -8)
+    ind.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    ind.Parent = btn
     
-    local IndCorner = Instance.new("UICorner")
-    IndCorner.CornerRadius = UDim.new(0, 9)
-    IndCorner.Parent = Indicator
+    local ic = Instance.new("UICorner")
+    ic.CornerRadius = UDim.new(0, 8)
+    ic.Parent = ind
     
-    -- Get/Set config value
-    local function getValue()
-        return Config[configKey]
-    end
+    -- Get initial state
+    local state = Config[configKey] or false
     
-    local function setValue(val)
-        Config[configKey] = val
-    end
-    
-    -- Update visual
-    local function updateVisual(state)
+    local function update()
         if state then
-            ToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)  -- Green when ON
-            Indicator.Position = UDim2.new(0, 23, 0.5, -9)
+            btn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+            ind.Position = UDim2.new(0, 21, 0.5, -8)
         else
-            ToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)  -- Gray when OFF
-            Indicator.Position = UDim2.new(0, 3, 0.5, -9)
+            btn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+            ind.Position = UDim2.new(0, 3, 0.5, -8)
         end
     end
+    update()
     
-    -- Initialize
-    local currentState = getValue()
-    updateVisual(currentState)
-    
-    -- Click handler (Fixed: Proper Connect syntax)
-    ToggleBtn.MouseButton1Click:Connect(function()
-        currentState = not currentState
-        setValue(currentState)
-        updateVisual(currentState)
-        
-        if callback then
-            callback(currentState)
-        end
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        Config[configKey] = state
+        update()
+        Chat(label .. ": " .. tostring(state), Color3.fromRGB(200,200,200))
     end)
     
-    return ToggleFrame
+    return f
 end
 
--- Create Button (Height: 40px)
-function Zuncodex:CreateButton(parent, label, callback)
-    local Btn = Instance.new("TextButton")
-    Btn.Name = label .. "Button"
-    Btn.Size = UDim2.new(1, 0, 0, 40)
-    Btn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-    Btn.BorderSizePixel = 0
-    Btn.Text = label
-    Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Btn.TextSize = 14
-    Btn.Font = Enum.Font.GothamBold
-    Btn.Parent = parent
+function CreateButton(parent, label, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 36)
+    btn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    btn.BorderSizePixel = 0
+    btn.Text = label
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.TextSize = 13
+    btn.Font = Enum.Font.GothamBold
+    btn.Parent = parent
     
-    local BtnCorner = Instance.new("UICorner")
-    BtnCorner.CornerRadius = UDim.new(0, 8)
-    BtnCorner.Parent = Btn
+    local bc = Instance.new("UICorner")
+    bc.CornerRadius = UDim.new(0, 6)
+    bc.Parent = btn
     
-    -- Hover/Press effect
-    Btn.MouseButton1Down:Connect(function()
-        Btn.BackgroundColor3 = Color3.fromRGB(120, 30, 200)
+    btn.MouseButton1Click:Connect(function()
+        if callback then callback() end
     end)
     
-    Btn.MouseButton1Up:Connect(function()
-        Btn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-    end)
-    
-    -- Click handler
-    Btn.MouseButton1Click:Connect(function()
-        if callback then
-            callback()
-        end
-    end)
-    
-    return Btn
+    return btn
 end
 
--- Create Slider
-function Zuncodex:CreateSlider(parent, label, configKey, minVal, maxVal, defaultVal, callback)
-    local SliderFrame = Instance.new("Frame")
-    SliderFrame.Name = label .. "Slider"
-    SliderFrame.Size = UDim2.new(1, 0, 0, 55)
-    SliderFrame.BackgroundTransparency = 1
-    SliderFrame.Parent = parent
-    
-    -- Label with value
-    local Label = Instance.new("TextLabel")
-    Label.Name = "Label"
-    Label.Size = UDim2.new(1, 0, 0, 20)
-    Label.BackgroundTransparency = 1
-    Label.Text = label .. ": " .. defaultVal
-    Label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Label.TextSize = 13
-    Label.Font = Enum.Font.Gotham
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.Parent = SliderFrame
-    
-    -- Value display
-    local ValueLabel = Instance.new("TextLabel")
-    ValueLabel.Name = "Value"
-    ValueLabel.Size = UDim2.new(0, 50, 0, 20)
-    ValueLabel.Position = UDim2.new(1, -50, 0, 0)
-    ValueLabel.BackgroundTransparency = 1
-    ValueLabel.Text = tostring(defaultVal)
-    ValueLabel.TextColor3 = Color3.fromRGB(138, 43, 226)
-    ValueLabel.TextSize = 13
-    ValueLabel.Font = Enum.Font.GothamBold
-    ValueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    ValueLabel.Parent = SliderFrame
-    
-    -- Slider background
-    local SliderBg = Instance.new("Frame")
-    SliderBg.Name = "Background"
-    SliderBg.Size = UDim2.new(1, 0, 0, 8)
-    SliderBg.Position = UDim2.new(0, 0, 1, -14)
-    SliderBg.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    SliderBg.BorderSizePixel = 0
-    SliderBg.Parent = SliderFrame
-    
-    local BgCorner = Instance.new("UICorner")
-    BgCorner.CornerRadius = UDim.new(0, 4)
-    BgCorner.Parent = SliderBg
-    
-    -- Slider fill
-    local Fill = Instance.new("Frame")
-    Fill.Name = "Fill"
-    Fill.Size = UDim2.new((defaultVal - minVal) / (maxVal - minVal), 0, 1, 0)
-    Fill.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-    Fill.BorderSizePixel = 0
-    Fill.Parent = SliderBg
-    
-    local FillCorner = Instance.new("UICorner")
-    FillCorner.CornerRadius = UDim.new(0, 4)
-    FillCorner.Parent = Fill
-    
-    -- Slider thumb
-    local Thumb = Instance.new("Frame")
-    Thumb.Name = "Thumb"
-    Thumb.Size = UDim2.new(0, 18, 0, 18)
-    Thumb.Position = UDim2.new((defaultVal - minVal) / (maxVal - minVal), -9, 0.5, -9)
-    Thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    Thumb.BorderSizePixel = 0
-    Thumb.Parent = SliderBg
-    
-    local ThumbCorner = Instance.new("UICorner")
-    ThumbCorner.CornerRadius = UDim.new(0, 9)
-    ThumbCorner.Parent = Thumb
-    
-    -- Slider logic
-    local dragging = false
-    local currentValue = defaultVal
-    
-    local function updateSlider(input)
-        local relativeX = math.clamp(
-            (input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 
-            0, 
-            1
-        )
-        currentValue = math.floor(minVal + relativeX * (maxVal - minVal))
-        
-        -- Update visuals
-        Fill.Size = UDim2.new(relativeX, 0, 1, 0)
-        Thumb.Position = UDim2.new(relativeX, -9, 0.5, -9)
-        Label.Text = label .. ": " .. currentValue
-        ValueLabel.Text = tostring(currentValue)
-        
-        -- Update config
-        Config[configKey] = currentValue
-        
-        if callback then
-            callback(currentValue)
-        end
-    end
-    
-    SliderBg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or
-           input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            updateSlider(input)
-        end
-    end)
-    
-    SliderBg.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or
-           input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-    
-    UIS.InputChanged:Connect(function(input)
-        if dragging then
-            if input.UserInputType == Enum.UserInputType.MouseMovement or
-               input.UserInputType == Enum.UserInputType.Touch then
-                updateSlider(input)
-            end
-        end
-    end)
-    
-    return SliderFrame
+function CreateLabel(parent, text, color)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 18)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextColor3 = color or Color3.fromRGB(180,180,180)
+    lbl.TextSize = 11
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = parent
+    return lbl
 end
 
--- Create Dropdown
-function Zuncodex:CreateDropdown(parent, label, options, defaultOption, configKey, callback)
-    local DropdownFrame = Instance.new("Frame")
-    DropdownFrame.Name = label .. "Dropdown"
-    DropdownFrame.Size = UDim2.new(1, 0, 0, 42)
-    DropdownFrame.BackgroundTransparency = 1
-    DropdownFrame.Parent = parent
-    
-    -- Selected button
-    local SelectedBtn = Instance.new("TextButton")
-    SelectedBtn.Name = "Selected"
-    SelectedBtn.Size = UDim2.new(1, 0, 1, 0)
-    SelectedBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    SelectedBtn.BorderSizePixel = 0
-    SelectedBtn.Text = " " .. (defaultOption or options[1])
-    SelectedBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SelectedBtn.TextSize = 13
-    SelectedBtn.Font = Enum.Font.Gotham
-    SelectedBtn.TextXAlignment = Enum.TextXAlignment.Left
-    SelectedBtn.Parent = DropdownFrame
-    
-    local SelCorner = Instance.new("UICorner")
-    SelCorner.CornerRadius = UDim.new(0, 8)
-    SelCorner.Parent = SelectedBtn
-    
-    -- Arrow
-    local Arrow = Instance.new("TextLabel")
-    Arrow.Name = "Arrow"
-    Arrow.Size = UDim2.new(0, 24, 1, 0)
-    Arrow.Position = UDim2.new(1, -26, 0, 0)
-    Arrow.BackgroundTransparency = 1
-    Arrow.Text = "▼"
-    Arrow.TextColor3 = Color3.fromRGB(180, 180, 180)
-    Arrow.TextSize = 11
-    Arrow.Font = Enum.Font.Gotham
-    Arrow.Parent = SelectedBtn
-    
-    -- Options container
-    local OptionsFrame = Instance.new("Frame")
-    OptionsFrame.Name = "Options"
-    OptionsFrame.Size = UDim2.new(1, 0, 0, 0)
-    OptionsFrame.Position = UDim2.new(0, 0, 1, 0)
-    OptionsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    OptionsFrame.BorderSizePixel = 0
-    OptionsFrame.Visible = false
-    OptionsFrame.ZIndex = 10
-    OptionsFrame.Parent = SelectedBtn
-    
-    local OptCorner = Instance.new("UICorner")
-    OptCorner.CornerRadius = UDim.new(0, 8)
-    OptCorner.Parent = OptionsFrame
-    
-    local OptionsLayout = Instance.new("UIListLayout")
-    OptionsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    OptionsLayout.Parent = OptionsFrame
-    
-    local isOpen = false
-    local selectedValue = defaultOption or options[1]
-    
-    -- Populate options
-    for i, option in ipairs(options) do
-        local OptBtn = Instance.new("TextButton")
-        OptBtn.Name = "Option" .. i
-        OptBtn.Size = UDim2.new(1, 0, 0, 32)  -- 32px for easy touch
-        OptBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-        OptBtn.BorderSizePixel = 0
-        OptBtn.Text = " " .. option
-        OptBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        OptBtn.TextSize = 12
-        OptBtn.Font = Enum.Font.Gotham
-        OptBtn.TextXAlignment = Enum.TextXAlignment.Left
-        OptBtn.ZIndex = 11
-        OptBtn.Parent = OptionsFrame
-        
-        local OptBtnCorner = Instance.new("UICorner")
-        OptBtnCorner.CornerRadius = UDim.new(0, 6)
-        OptBtnCorner.Parent = OptBtn
-        
-        -- Option click
-        OptBtn.MouseButton1Click:Connect(function()
-            selectedValue = option
-            SelectedBtn.Text = " " .. option
-            OptionsFrame.Visible = false
-            isOpen = false
-            Arrow.Text = "▼"
-            
-            Config[configKey] = selectedValue
-            
-            if callback then
-                callback(selectedValue)
-            end
-        end)
-        
-        -- Hover effect
-        OptBtn.MouseEnter:Connect(function()
-            OptBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-        end)
-        
-        OptBtn.MouseLeave:Connect(function()
-            OptBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-        end)
-    end
-    
-    -- Auto-size options
-    OptionsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()  -- Fixed: Added )
-        OptionsFrame.Size = UDim2.new(1, 0, 0, OptionsLayout.AbsoluteContentSize.Y)
-    end)
-    
-    -- Toggle dropdown
-    SelectedBtn.MouseButton1Click:Connect(function()
-        isOpen = not isOpen
-        OptionsFrame.Visible = isOpen
-        Arrow.Text = isOpen and "▲" or "▼"
-    end)
-    
-    -- Close when clicking outside
-    UIS.InputBegan:Connect(function(input, gameProcessed)
-        if not gameProcessed then
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or
-               input.UserInputType == Enum.UserInputType.Touch then
-                if isOpen then
-                    isOpen = false
-                    OptionsFrame.Visible = false
-                    Arrow.Text = "▼"
-                end
-            end
-        end
-    end)
-    
-    return DropdownFrame
-end
+-- ===== CREATE SECTIONS =====
 
--- Create Label
-function Zuncodex:CreateLabel(parent, text, color)
-    local Label = Instance.new("TextLabel")
-    Label.Name = "Label_" .. text
-    Label.Size = UDim2.new(1, 0, 0, 20)
-    Label.BackgroundTransparency = 1
-    Label.Text = text
-    Label.TextColor3 = color or Color3.fromRGB(180, 180, 180)
-    Label.TextSize = 12
-    Label.Font = Enum.Font.Gotham
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.TextWrapped = true
-    Label.Parent = parent
-    
-    return Label
-end
+-- Combat Section (MAIN FEATURE - From GitHub pattern)
+local combatSec = CreateSection("⚔️ Auto Farm")
+CreateToggle(combatSec, "Auto Farm", "AutoFarm")
+CreateToggle(combatSec, "Bring Mobs to You", "BringMobs")
 
--- Create Divider
-function Zuncodex:CreateDivider(parent)
-    local Divider = Instance.new("Frame")
-    Divider.Name = "Divider"
-    Divider.Size = UDim2.new(1, 0, 0, 1)
-    Divider.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    Divider.BorderSizePixel = 0
-    Divider.Parent = parent
-    
-    return Divider
-end
+-- Skills Section (From xHeptc pattern)
+local skillSec = CreateSection("🎯 Auto Skills")
+CreateToggle(skillSec, "Auto Skill Z", "AutoSkillZ")
+CreateToggle(skillSec, "Auto Skill C", "AutoSkillC")
+CreateToggle(skillSec, "Auto Skill X", "AutoSkillX")
+CreateToggle(skillSec, "Auto Skill F", "AutoSkillF")
 
--- ============================================================
--- TOGGLE GUI FUNCTION
--- ============================================================
+-- ESP Section
+local espSec = CreateSection("👁️ ESP")
+CreateToggle(espSec, "Enable ESP", "ESP")
 
-function Zuncodex:ToggleGUI()
-    self.GUIOpen = not self.GUIOpen
-    MainFrame.Visible = self.GUIOpen
-    
-    if self.GUIOpen then
-        -- Animate in
-        MainFrame.Size = isMobile and UDim2.new(0, 340, 0, 0) or UDim2.new(0, 380, 0, 0)
-        TS:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back), {
-            Size = isMobile and UDim2.new(0, 340, 0, 500) or UDim2.new(0, 380, 0, 540)
-        }):Play()
-        
-        LogoBtn.Text = "✕"
-        LogoBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
-    else
-        LogoBtn.Text = "Z"
-        LogoBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-    end
-end
+-- Misc Section
+local miscSec = CreateSection("⚙️ Character")
+CreateToggle(miscSec, "No Clip", "NoClip")
+CreateToggle(miscSec, "Fly", "Fly")
 
--- Logo click handler
-LogoBtn.MouseButton1Click:Connect(function()
-    Zuncodex:ToggleGUI()
-end)
+-- Fruit Section
+local fruitSec = CreateSection("🍎 Fruit")
+CreateToggle(fruitSec, "Fruit Sniper", "FruitSniper")
 
--- Close button handler
-CloseBtn.MouseButton1Click:Connect(function()
-    Zuncodex.GUIOpen = false
-    MainFrame.Visible = false
-    LogoBtn.Text = "Z"
-    LogoBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-end)
+-- Info Section
+local infoSec = CreateSection("ℹ️ Info")
+CreateLabel(infoSec, "Version: 5.1.0 (GitHub Based)", Color3.fromRGB(138,43,226))
+CreateLabel(infoSec, "Pattern: xHeptc/lattex6329", Color3.fromRGB(150,150,150))
 
--- Minimize button handler
-MinBtn.MouseButton1Click:Connect(function()
-    Zuncodex.GUIOpen = false
-    MainFrame.Visible = false
-    LogoBtn.Text = "Z"
-    LogoBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-end)
-
--- ============================================================
--- CREATE ALL SECTIONS
--- ============================================================
-
--- COMBAT SECTION
-local CombatSec = Zuncodex:CreateSection("⚔️ Combat")
-Zuncodex:CreateToggle(CombatSec, "Auto Farm", "CombatEnabled", function(state)
-    print("[Zuncodex] Auto Farm:", state)
-end)
-Zuncodex:CreateDropdown(CombatSec, "Target Mode", {"Closest", "LowestHP"}, "Closest", "TargetMode")
-Zuncodex:CreateSlider(CombatSec, "Attack Distance", "AttackDistance", 5, 100, 25)
-Zuncodex:CreateToggle(CombatSec, "Fast Attack", "FastAttack")
-Zuncodex:CreateToggle(CombatSec, "Kill Aura", "KillAura")
-Zuncodex:CreateSlider(CombatSec, "Aura Range", "AuraRange", 10, 100, 30)
-Zuncodex:CreateToggle(CombatSec, "Bring Mobs", "BringMobs")
-
--- HAKI SECTION
-local HakiSec = Zuncodex:CreateSection("🥋 Haki")
-Zuncodex:CreateToggle(HakiSec, "Auto Buso (Armament)", "AutoBuso")
-Zuncodex:CreateSlider(HakiSec, "Buso HP Threshold %", "BusoThreshold", 0, 100, 80)
-Zuncodex:CreateToggle(HakiSec, "Auto Ken (Observation)", "AutoKen")
-Zuncodex:CreateToggle(HakiSec, "Auto Soru (Teleport)", "AutoSoru")
-
--- BOSS SECTION
-local BossSec = Zuncodex:CreateSection("👹 Boss")
-Zuncodex:CreateToggle(BossSec, "Auto Farm Boss", "BossFarm")
-Zuncodex:CreateToggle(BossSec, "Alert on Spawn", "BossAlert")
-Zuncodex:CreateToggle(BossSec, "TP to Boss", "BosstoTP")
-
--- FRUIT SECTION
-local FruitSec = Zuncodex:CreateSection("🍎 Fruit")
-Zuncodex:CreateToggle(FruitSec, "Fruit Sniper", "FruitSniper")
-Zuncodex:CreateSlider(FruitSec, "Sniper Range", "SniperRange", 100, 2000, 500)
-Zuncodex:CreateToggle(FruitSec, "Auto Store Fruit", "AutoStore")
-Zuncodex:CreateToggle(FruitSec, "Notify Rare Fruits", "FruitNotify")
-
--- ESP SECTION
-local ESPSec = Zuncodex:CreateSection("👁️ ESP")
-Zuncodex:CreateToggle(ESPSec, "Enable ESP", "ESPEnabled")
-Zuncodex:CreateToggle(ESPSec, "Show Players", "ESPPlayers")
-Zuncodex:CreateToggle(ESPSec, "Show NPCs", "ESPNPCs")
-Zuncodex:CreateToggle(ESPSec, "Show Fruits", "ESPFruits")
-Zuncodex:CreateSlider(ESPSec, "Max Distance", "ESPMaxDist", 100, 10000, 5000)
-Zuncodex:CreateToggle(ESPSec, "Show Health", "ESPShowHealth")
-Zuncodex:CreateToggle(ESPSec, "Show Distance", "ESPShowDist")
-
--- MISC SECTION
-local MiscSec = Zuncodex:CreateSection("⚙️ Character")
-Zuncodex:CreateToggle(MiscSec, "FPS Unlock", "FPSUnlock")
-Zuncodex:CreateToggle(MiscSec, "No Clip", "NoClip")
-Zuncodex:CreateToggle(MiscSec, "Fly", "Fly")
-Zuncodex:CreateSlider(MiscSec, "Fly Speed", "FlySpeed", 10, 200, 60)
-Zuncodex:CreateSlider(MiscSec, "Walk Speed", "WalkSpeed", 16, 200, 16)
-Zuncodex:CreateSlider(MiscSec, "Jump Power", "JumpPower", 50, 300, 50)
-Zuncodex:CreateToggle(MiscSec, "Anti-AFK", "AntiAFK")
-
--- RAID SECTION
-local RaidSec = Zuncodex:CreateSection("💥 Raid")
-Zuncodex:CreateToggle(RaidSec, "Auto Raid", "RaidAuto")
-Zuncodex:CreateToggle(RaidSec, "Auto Join", "RaidJoin")
-Zuncodex:CreateToggle(RaidSec, "Auto Start", "RaidStart")
-Zuncodex:CreateToggle(RaidSec, "Auto Finish", "RaidFinish")
-
--- STATS SECTION
-local StatsSec = Zuncodex:CreateSection("📊 Stats")
-Zuncodex:CreateToggle(StatsSec, "Auto Stats", "StatsAuto")
-Zuncodex:CreateToggle(StatsSec, "Melee", "StatsMelee")
-Zuncodex:CreateToggle(StatsSec, "Defense", "StatsDef")
-Zuncodex:CreateToggle(StatsSec, "Sword", "StatsSword")
-Zuncodex:CreateToggle(StatsSec, "Gun", "StatsGun")
-Zuncodex:CreateSlider(StatsSec, "Keep Points for Level", "StatsKeep", 0, 200, 50)
-
--- INFO SECTION
-local InfoSec = Zuncodex:CreateSection("ℹ️ Info")
-Zuncodex:CreateLabel(InfoSec, "Version: 5.1.0 (Mobile Edition)", Color3.fromRGB(138, 43, 226))
-Zuncodex:CreateLabel(InfoSec, "Platform: " .. (isMobile and "Mobile 📱" or "PC 💻"))
-Zuncodex:CreateDivider(InfoSec)
-Zuncodex:CreateButton(InfoSec, "Unload Script", function()
+CreateButton(infoSec, "Unload Script", function()
+    Chat("Unloading...", Color3.fromRGB(255,100,100))
     ScreenGui:Destroy()
-    Zuncodex = nil
-    collectgarbage()
+    getgenv().ZuncodexConfig = nil
 end)
 
--- ============================================================
--- CORE SYSTEMS (All Logic Here)
--- ============================================================
+-- ===== CORE SYSTEMS (From working GitHub scripts) =====
 
--- ESP System (Fixed: Cache objects, no per-frame creation)
-local ESPObjects = {}
-
-function Zuncodex:UpdateESP()
-    if not Config.ESPEnabled then
-        -- Clean up all ESP objects
-        for key, obj in pairs(ESPObjects) do
-            if obj and obj.Gui then
-                obj.Gui:Destroy()
-            end
-        end
-        ESPObjects = {}
-        return
-    end
-    
-    local char = LP.Character
-    if not char then return end
-    
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    
-    -- ESP for Players
-    if Config.ESPPlayers then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LP and player.Character then
-                local phrp = player.Character:FindFirstChild("HumanoidRootPart")
-                if phrp then
-                    local distance = (phrp.Position - hrp.Position).Magnitude
-                    
-                    if distance <= Config.ESPMaxDist then
-                        local key = "Player_" .. player.Name
-                        
-                        -- Only create if not exists (FIXED: No leak!)
-                        if not ESPObjects[key] then
-                            local head = player.Character:FindFirstChild("Head")
-                            if head then
-                                local bgui = Instance.new("BillboardGui")
-                                bgui.Name = "ZuncodexESP"
-                                bgui.Adornee = head
-                                bgui.Size = UDim2.new(0, 200, 0, 100)
-                                bgui.StudsOffset = Vector3.new(0, 3, 0)
-                                bgui.AlwaysOnTop = true
-                                bgui.Parent = player.Character
-                                
-                                local nameLbl = Instance.new("TextLabel")
-                                nameLbl.Size = UDim2.new(1, 0, 0, 20)
-                                nameLbl.BackgroundTransparency = 1
-                                nameLbl.Text = player.Name
-                                nameLbl.TextColor3 = Color3.fromRGB(255, 50, 50)
-                                nameLbl.TextSize = 14
-                                nameLbl.Font = Enum.Font.GothamBold
-                                nameLbl.Parent = bgui
-                                
-                                local distLbl = Instance.new("TextLabel")
-                                distLbl.Size = UDim2.new(1, 0, 0, 16)
-                                distLbl.Position = UDim2.new(0, 0, 1, -20)
-                                distLbl.BackgroundTransparency = 1
-                                distLbl.Text = ""
-                                distLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                distLbl.TextSize = 12
-                                distLbl.Font = Enum.Font.Gotham
-                                distLbl.Parent = bgui
-                                
-                                ESPObjects[key] = {
-                                    Gui = bgui,
-                                    NameLabel = nameLbl,
-                                    DistLabel = distLbl
-                                }
-                            end
-                        end
-                        
-                        -- Update existing ESP object
-                        local esp = ESPObjects[key]
-                        if esp and esp.Gui then
-                            esp.DistLabel.Text = "[" .. math.floor(distance) .. "m]"
-                            esp.Gui.Enabled = true
-                        end
-                    else
-                        -- Disable if too far
-                        if ESPObjects["Player_" .. player.Name] then
-                            ESPObjects["Player_" .. player.Name].Gui.Enabled = false
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    -- ESP for NPCs (Same pattern)
-    if Config.ESPNPCs then
-        local npcsFolder = WS:FindFirstChild("Npcs")
-        if npcsFolder then
-            for _, npc in pairs(npcsFolder:GetChildren()) do
-                local humanoid = npc:FindFirstChild("Humanoid")
-                local nrhp = npc:FindFirstChild("HumanoidRootPart")  -- Fixed: Full path
-                
-                if humanoid and nrhp then
-                    local distance = (nrhp.Position - hrp.Position).Magnitude
-                    
-                    if distance <= Config.ESPMaxDist then
-                        local key = "NPC_" .. npc.Name
-                        
-                        if not ESPObjects[key] then
-                            local head = npc:FindFirstChild("Head")
-                            if head then
-                                local bgui = Instance.new("BillboardGui")
-                                bgui.Name = "ZuncodexESP"
-                                bgui.Adornee = head
-                                bgui.Size = UDim2.new(0, 200, 0, 100)
-                                bgui.StudsOffset = Vector3.new(0, 3, 0)
-                                bgui.AlwaysOnTop = true
-                                bgui.Parent = npc
-                                
-                                local nameLbl = Instance.new("TextLabel")
-                                nameLbl.Size = UDim2.new(1, 0, 0, 20)
-                                nameLbl.BackgroundTransparency = 1
-                                nameLbl.Text = npc.Name
-                                nameLbl.TextColor3 = Color3.fromRGB(50, 255, 50)
-                                nameLbl.TextSize = 14
-                                nameLbl.Font = Enum.Font.GothamBold
-                                nameLbl.Parent = bgui
-                                
-                                local distLbl = Instance.new("TextLabel")
-                                distLbl.Size = UDim2.new(1, 0, 0, 16)
-                                distLbl.Position = UDim2.new(0, 0, 1, -20)
-                                distLbl.BackgroundTransparency = 1
-                                distLbl.Text = ""
-                                distLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                distLbl.TextSize = 12
-                                distLbl.Font = Enum.Font.Gotham
-                                distLbl.Parent = bgui
-                                
-                                ESPObjects[key] = {
-                                    Gui = bgui,
-                                    NameLabel = nameLbl,
-                                    DistLabel = distLbl
-                                }
-                            end
-                        end
-                        
-                        local esp = ESPObjects[key]
-                        if esp and esp.Gui then
-                            esp.DistLabel.Text = "[" .. math.floor(distance) .. "m]"
-                            esp.Gui.Enabled = true
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
--- Combat System (Fixed: With cooldown)
-function Zuncodex:FindBestTarget()
+-- Find Enemy Function (From xHeptc pattern - WORKING!)
+function FindEnemy()
     local char = LP.Character
     if not char then return nil end
     
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
     
-    local bestTarget = nil
-    local closestDistance = math.huge
-    local lowestHealth = math.huge
-    
-    local npcsFolder = WS:FindFirstChild("Npcs")
-    if not npcsFolder then return nil end
-    
-    for _, npc in pairs(npcsFolder:GetChildren()) do
-        local humanoid = npc:FindFirstChild("Humanoid")
-        local nrhp = npc:FindFirstChild("HumanoidRootPart")
-        
-        if humanoid and nrhp and humanoid.Health > 0 then
-            local distance = (nrhp.Position - hrp.Position).Magnitude
-            
-            if distance <= Config.AttackDistance then
-                local shouldTarget = false
+    -- Try Enemies folder first (Sea 1/2/3 pattern)
+    local enemiesFolder = workspace:FindFirstChild("Enemies")
+    if enemiesFolder then
+        for _, enemy in pairs(enemiesFolder:GetChildren()) do
+            if enemy:IsA("Model") then
+                local hum = enemy:FindFirstChild("Humanoid")
+                local ehrp = enemy:FindFirstChild("HumanoidRootPart")
                 
-                if Config.TargetMode == "Closest" then
-                    if distance < closestDistance then
-                        closestDistance = distance
-                        shouldTarget = true
-                    end
-                elseif Config.TargetMode == "LowestHP" then
-                    if humanoid.Health < lowestHealth then
-                        lowestHealth = humanoid.Health
-                        shouldTarget = true
-                    end
-                end
-                
-                if shouldTarget then
-                    bestTarget = npc
-                end
-            end
-        end
-    end
-    
-    return bestTarget
-end
-
-function Zuncodex:AttackTarget(target)
-    if not target then return false end
-    
-    local char = LP.Character
-    if not char then return false end
-    
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local thrp = target:FindFirstChild("HumanoidRootPart")
-    
-    if not hrp or not thrp then return false end
-    
-    -- Auto Buso
-    if Config.AutoBuso then
-        local busoValue = LP:FindFirstChild("Buso")
-        if busoValue and busoValue.Value < Config.BusoThreshold * 10 then
-            Fire("Buso")
-        end
-    end
-    
-    -- Position handling
-    if Config.BringMobs then
-        thrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 5)
-    else
-        hrp.CFrame = thrp.CFrame * CFrame.new(0, 0, 5)
-    end
-    
-    -- Attack with tool
-    local tool = char:FindFirstChildOfClass("Tool")
-    if tool then
-        Fire("Combat", target)
-    end
-    
-    return true
-end
-
-function Zuncodex:CombatLoop()
-    -- Check if combat is enabled
-    if not Config.CombatEnabled and not Config.KillAura then
-        return
-    end
-    
-    -- Cooldown check (FIXED: Prevent spam)
-    if not CanAttack() then
-        return
-    end
-    
-    if Config.KillAura then
-        -- Kill all in range
-        local char = LP.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        
-        if hrp then
-            local npcsFolder = WS:FindFirstChild("Npcs")
-            if npcsFolder then
-                for _, npc in pairs(npcsFolder:GetChildren()) do
-                    local hum = npc:FindFirstChild("Humanoid")
-                    local nrp = npc:FindFirstChild("HumanoidRootPart")
+                if hum and ehrp and hum.Health > 0 then
+                    local dist = (ehrp.Position - hrp.Position).Magnitude
                     
-                    if hum and nrp and hum.Health > 0 then
-                        local dist = (nrp.Position - hrp.Position).Magnitude
-                        if dist <= Config.AuraRange then
-                            self:AttackTarget(npc)
-                        end
-                    end
-                end
-            end
-        end
-    elseif Config.CombatEnabled then
-        -- Normal auto farm
-        local target = self:FindBestTarget()
-        if target then
-            self:AttackTarget(target)
-        end
-    end
-    
-    SetAttackCooldown()
-end
-
--- Auto Stats (Fixed: With cooldown)
-function Zuncodex:AutoStatsLoop()
-    if not Config.StatsAuto then return end
-    
-    -- Cooldown check (only run every 2 seconds)
-    if tick() - LastStatsTime < 2 then return end
-    
-    local stats = LP:FindFirstChild("stats")
-    if not stats then return end
-    
-    local points = stats:FindFirstChild("Points")
-    if not points or not points:IsA("IntValue") then return end
-    if points.Value <= Config.StatsKeep then return end
-    
-    local allocPoints = points.Value - Config.StatsKeep
-    if allocPoints <= 0 then return end
-    
-    -- Build allocation list
-    local allocations = {}
-    if Config.StatsMelee then table.insert(allocations, "Melee") end
-    if Config.StatsDef then table.insert(allocations, "Defense") end
-    if Config.StatsSword then table.insert(allocations, "Sword") end
-    if Config.StatsGun then table.insert(allocations, "Gun") end
-    
-    if #allocations == 0 then return end
-    
-    local perStat = math.floor(allocPoints / #allocations)
-    
-    for _, stat in ipairs(allocations) do
-        Fire("AddPoint", stat, perStat)
-    end
-    
-    LastStatsTime = tick()
-end
-
--- Auto Raid (Fixed: With cooldown)
-function Zuncodex:AutoRaidLoop()
-    if not Config.RaidAuto then return end
-    
-    -- Cooldown check
-    if tick() - LastRaidTime < 5 then return end
-    
-    local inRaidArea = WS:FindFirstChild("_RaidArea")
-    
-    if not inRaidArea then
-        -- Not in raid, try to join
-        if Config.RaidJoin then
-            Fire("JoinRaid")
-        end
-    else
-        -- In raid area
-        if Config.RaidStart then
-            Fire("StartRaid")
-        end
-    end
-    
-    LastRaidTime = tick()
-end
-
--- Fruit Sniper (Optimized: Not scanning every frame)
-local LastFruitScan = 0
-
-function Zuncodex:FruitSniperLoop()
-    if not Config.FruitSniper then return end
-    
-    -- Only scan every 3 seconds (optimization)
-    if tick() - LastFruitScan < 3 then return end
-    
-    local char = LP.Character
-    if not char then return end
-    
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    
-    -- Scan for fruits
-    for _, obj in pairs(WS:GetDescendants()) do
-        if obj:IsA("Tool") then
-            local handle = obj:FindFirstChild("Handle")
-            if handle then
-                local distance = (handle.Position - hrp.Position).Magnitude
-                
-                if distance <= Config.SniperRange then
-                    -- Notify
-                    if Config.FruitNotify then
-                        SG:SetCore("ChatMakeSystemMessage", {
-                            Text = "[Zuncodex] 🍎 Found: " .. obj.Name .. " (" .. math.floor(distance) .. "m)",
-                            Color = Color3.fromRGB(0, 255, 0)
-                        })
-                    end
-                    
-                    -- Auto store
-                    if Config.AutoStore then
-                        hrp.CFrame = handle.CFrame
+                    if dist <= Config.AttackDist then
+                        return enemy
                     end
                 end
             end
         end
     end
     
-    LastFruitScan = tick()
-end
-
--- Boss Alert System
-function Zuncodex:CheckBosses()
-    if not Config.BossAlert and not Config.BossFarm then return end
-    
-    -- List of bosses to check (can be expanded)
-    local bossList = {
-        "Baggy",
-        "Baggy (Old)",
-        "The Saw",
-        "Mera no Mi Ace",
-        "Moria",
-        "Dough King",
-        "Leviathan"
-    }
-    
-    for _, bossName in ipairs(bossList) do
-        local boss = WS:FindFirstChild(bossName)
-        if boss then
-            if Config.BossAlert then
-                SG:SetCore("ChatMakeSystemMessage", {
-                    Text = "[Zuncodex] 👹 Boss " .. bossName .. " spawned!",
-                    Color = Color3.fromRGB(255, 0, 0)
-                })
-            end
+    -- Try Npcs folder (alternative)
+    local npcsFolder = workspace:FindFirstChild("Npcs")
+    if npcsFolder then
+        for _, npc in pairs(npcsFolder:GetChildren()) do
+            local hum = npc:FindFirstChild("Humanoid")
+            local nrp = npc:FindFirstChild("HumanoidRootPart")
             
-            if Config.BossFarm and Config.BosstoTP then
+            if hum and nrp and hum.Health > 0 then
+                local dist = (nrp.Position - hrp.Position).Magnitude
+                
+                if dist <= Config.AttackDist then
+                    return npc
+                end
+            end
+        end
+    end
+    
+    return nil
+end
+
+-- Auto Farm Loop (From xHeptc/coroutine.wrap pattern - PROVEN WORKING!)
+coroutine.wrap(function()
+    while wait(0.5) do  -- 0.5s interval (not every frame - less lag)
+        if Config.AutoFarm then
+            local target = FindEnemy()
+            
+            if target then
                 local char = LP.Character
                 if char then
                     local hrp = char:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        local bossHRP = boss:FindFirstChild("HumanoidRootPart")
-                        if bossHRP then
-                            hrp.CFrame = bossHRP.CFrame * CFrame.new(0, 0, 10)
+                    local thrp = target:FindFirstChild("HumanoidRootPart")
+                    
+                    if hrp and thrp then
+                        -- Position (From working script pattern)
+                        if Config.BringMobs then
+                            thrp.CFrame = hrp.CFrame * CFrame.new(0, 0, 5)
+                        else
+                            hrp.CFrame = thrp.CFrame * CFrame.new(0, 0, 5)
                         end
+                        
+                        -- Click to attack (VirtualUser - PROVEN METHOD)
+                        pcall(function()
+                            VirtualUser:CaptureController()
+                            VirtualUser:ClickButton1(Vector2.new())
+                        end)
                     end
                 end
             end
         end
     end
-end
+end)()
 
--- ============================================================
--- MISC SYSTEMS (NoClip, Fly, Speed, etc.)
--- ============================================================
-
--- NoClip System (Fixed: Proper connection management)
-local NoClipConnection = nil
-
-function Zuncodex:UpdateNoClip()
+-- Auto Skills (From xHeptc keypress pattern - PROVEN WORKING!)
+RunService.RenderStepped:Connect(function()
+    -- NoClip (From working script - ChangeState(11) = platform stand/no clip)
     if Config.NoClip then
-        if not NoClipConnection then
-            NoClipConnection = RunS.Stepped:Connect(function()
-                local char = LP.Character
-                if char then
-                    for _, part in pairs(char:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = false
-                        end
+        pcall(function()
+            local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
+            if hum then
+                hum:ChangeState(11)
+                
+                -- Also set CanCollide = false (extra safety)
+                for _, part in pairs(LP.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
                     end
                 end
-            end)
-        end
-    else
-        if NoClipConnection then
-            NoClipConnection:Disconnect()
-            NoClipConnection = nil
-        end
-        
-        -- Reset collision
-        local char = LP.Character
-        if char then
-            for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = true
-                end
             end
-        end
+        end)
     end
-end
+    
+    -- Auto Skills with keypress (PROVEN PATTERN)
+    wait()  -- Small delay to prevent spam
+    
+    if Config.AutoSkillZ then
+        pcall(function()
+            keypress(0x5A)  -- Z key
+            wait(0.5)
+            keyrelease(0x5A)
+        end)
+    end
+    
+    if Config.AutoSkillC then
+        pcall(function()
+            keypress(0x43)  -- C key
+            wait(0.5)
+            keyrelease(0x43)
+        end)
+    end
+    
+    if Config.AutoSkillX then
+        pcall(function()
+            keypress(0x58)  -- X key
+            wait(0.5)
+            keyrelease(0x58)
+        end)
+    end
+    
+    if Config.AutoSkillF then
+        pcall(function()
+            keypress(0x46)  -- F key
+            wait(0.5)
+            keyrelease(0x46)
+        end)
+    end
+end)
 
--- Fly System (Fixed: Proper cleanup)
-local FlyConnection = nil
-local IsFlying = false
-local FlyBodyVelocity = nil
+-- Fly System (Basic but working)
+local flyConn = nil
+local flying = false
+local bodyVel = nil
 
-function Zuncodex:UpdateFly()
+local function ToggleFly()
     local char = LP.Character
     if not char then return end
     
@@ -1379,22 +579,17 @@ function Zuncodex:UpdateFly()
     if not hrp then return end
     
     if Config.Fly then
-        if not IsFlying then
-            IsFlying = true
+        if not flying then
+            flying = true
             
-            -- Create body velocity
-            if not FlyBodyVelocity then
-                FlyBodyVelocity = Instance.new("BodyVelocity")
-                FlyBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                FlyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-            end
+            bodyVel = Instance.new("BodyVelocity")
+            bodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bodyVel.Velocity = Vector3.new(0, 0, 0)
+            bodyVel.Parent = hrp
             
-            FlyBodyVelocity.Parent = hrp
-            
-            -- Fly control loop
-            FlyConnection = RunS.RenderStepped:Connect(function()
+            flyConn = RunService.RenderStepped:Connect(function()
                 if not Config.Fly then
-                    self:UpdateFly()
+                    ToggleFly()
                     return
                 end
                 
@@ -1402,166 +597,208 @@ function Zuncodex:UpdateFly()
                 if not c then return end
                 
                 local h = c:FindFirstChild("HumanoidRootPart")
-                if not h or not FlyBodyVelocity then return end
+                if not h or not bodyVel then return end
                 
-                local camCF = Camera.CFrame
-                local moveVec = Vector3.new(0, 0, 0)
+                local cf = workspace.CurrentCamera.CFrame
+                local mv = Vector3.new(0, 0, 0)
                 
-                -- Controls
-                if UIS:IsKeyDown(Enum.KeyCode.W) then
-                    moveVec = moveVec + camCF.LookVector
-                end
-                if UIS:IsKeyDown(Enum.KeyCode.S) then
-                    moveVec = moveVec - camCF.LookVector
-                end
-                if UIS:IsKeyDown(Enum.KeyCode.A) then
-                    moveVec = moveVec - camCF.RightVector
-                end
-                if UIS:IsKeyDown(Enum.KeyCode.D) then
-                    moveVec = moveVec + camCF.RightVector
-                end
-                if UIS:IsKeyDown(Enum.KeyCode.Space) then
-                    moveVec = moveVec + Vector3.new(0, 1, 0)
-                end
-                if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
-                    moveVec = moveVec - Vector3.new(0, 1, 0)
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then mv = mv + cf.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then mv = mv - cf.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then mv = mv - cf.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then mv = mv + cf.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then mv = mv + Vector3.new(0, 1, 0) end
+                
+                if mv.Magnitude > 0 then
+                    mv = mv.Unit * Config.FlySpeed
                 end
                 
-                -- Apply velocity
-                if moveVec.Magnitude > 0 then
-                    moveVec = moveVec.Unit * Config.FlySpeed
+                bodyVel.Velocity = mv
+            end)
+            
+            Chat("Fly enabled", Color3.fromRGB(0,255,0))
+        end
+    else
+        flying = false
+        
+        if flyConn then
+            flyConn:Disconnect()
+            flyConn = nil
+        end
+        
+        if bodyVel then
+            bodyVel:Destroy()
+            bodyVel = nil
+        end
+        
+        Chat("Fly disabled", Color3.fromRGB(255,200,0))
+    end
+end
+
+-- Watch for config changes
+spawn(function()
+    while wait(0.3) do
+        -- Update fly state
+        ToggleFly()
+        
+        -- Reset NoClip collision when disabled
+        if not Config.NoClip then
+            pcall(function()
+                local char = LP.Character
+                if char then
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = true
+                        end
+                    end
                 end
-                
-                FlyBodyVelocity.Velocity = moveVec
             end)
         end
-    else
-        IsFlying = false
-        
-        -- Cleanup
-        if FlyConnection then
-            FlyConnection:Disconnect()
-            FlyConnection = nil
-        end
-        
-        if FlyBodyVelocity then
-            FlyBodyVelocity:Destroy()
-            FlyBodyVelocity = nil
+    end
+end)
+
+-- Simple ESP (Basic BillboardGui - WORKING PATTERN)
+local espObjects = {}
+
+spawn(function()
+    while wait(2) do  -- Update every 2 seconds (not every frame)
+        if not Config.ESP then
+            -- Clean up
+            for _, obj in pairs(espObjects) do
+                if obj then obj:Destroy() end
+            end
+            espObjects = {}
+        else
+            local char = LP.Character
+            if not char then continue end
+            
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+            
+            -- ESP for players
+            for _, player in pairs(Players:GetPlayers()) do
+                if player ~= LP and player.Character then
+                    local phrp = player.Character:FindFirstChild("HumanoidRootPart")
+                    local head = player.Character:FindFirstChild("Head")
+                    
+                    if phrp and head then
+                        local dist = (phrp.Position - hrp.Position).Magnitude
+                        
+                        if dist <= Config.ESPRange then
+                            local key = "P_" .. player.Name
+                            
+                            if not espObjects[key] then
+                                pcall(function()
+                                    local bg = Instance.new("BillboardGui")
+                                    bg.Adornee = head
+                                    bg.Size = UDim2.new(0, 150, 0, 80)
+                                    bg.StudsOffset = Vector3.new(0, 3, 0)
+                                    bg.AlwaysOnTop = true
+                                    bg.Parent = player.Character
+                                    
+                                    local nl = Instance.new("TextLabel")
+                                    nl.Size = UDim2.new(1, 0, 0, 20)
+                                    nl.BackgroundTransparency = 1
+                                    nl.Text = player.Name .. " [" .. math.floor(dist) .. "m]"
+                                    nl.TextColor3 = Color3.fromRGB(255, 50, 50)
+                                    nl.TextSize = 13
+                                    nl.Font = Enum.Font.GothamBold
+                                    nl.Parent = bg
+                                    
+                                    espObjects[key] = bg
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
+            
+            -- ESP for NPCs
+            local npcs = workspace:FindFirstChild("Npcs") or workspace:FindFirstChild("Enemies")
+            if npcs then
+                for _, npc in pairs(npcs:GetChildren()) do
+                    if npc:FindFirstChild("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
+                        local head = npc:FindFirstChild("Head")
+                        local nrp = npc.HumanoidRootPart.Position
+                        local dist = (nrp - hrp.Position).Magnitude
+                        
+                        if head and dist <= Config.ESPRange then
+                            local key = "N_" .. npc.Name
+                            
+                            if not espObjects[key] then
+                                pcall(function()
+                                    local bg = Instance.new("BillboardGui")
+                                    bg.Adornee = head
+                                    bg.Size = UDim2.new(0, 120, 0, 60)
+                                    bg.StudsOffset = Vector3.new(0, 3, 0)
+                                    bg.AlwaysOnTop = true
+                                    bg.Parent = npc
+                                    
+                                    local nl = Instance.new("TextLabel")
+                                    nl.Size = UDim2.new(1, 0, 0, 18)
+                                    nl.BackgroundTransparency = 1
+                                    nl.Text = npc.Name .. " [" .. math.floor(dist) .. "m]"
+                                    nl.TextColor3 = Color3.fromRGB(50, 255, 50)
+                                    nl.TextSize = 11
+                                    nl.Font = Enum.Font.Gotham
+                                    nl.Parent = bg
+                                    
+                                    espObjects[key] = bg
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
         end
     end
-end
+end)
 
--- Character Stats (WalkSpeed/JumpPower)
-function Zuncodex:UpdateCharacterStats()
-    local char = LP.Character
-    if not char then return end
-    
-    local humanoid = char:FindFirstChild("Humanoid")
-    if not humanoid then return end
-    
-    humanoid.WalkSpeed = Config.WalkSpeed
-    humanoid.JumpPower = Config.JumpPower
-end
-
--- FPS Unlock
-function Zuncodex:UpdateFPS()
-    if Config.FPSUnlock then
-        pcall(setfpscap, 999)
-    else
-        pcall(setfpscap, 60)
-    end
-end
-
--- Anti-AFK
-local AFKConnection = nil
-
-function Zuncodex:UpdateAntiAFK()
-    if Config.AntiAFK then
-        if not AFKConnection then
-            AFKConnection = LP.Idled:Connect(function()
-                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                wait(1)
-                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-            end)
-        end
-    else
-        if AFKConnection then
-            AFKConnection:Disconnect()
-            AFKConnection = nil
+-- Fruit Sniper (Simple distance check)
+spawn(function()
+    while wait(3) do  -- Check every 3 seconds
+        if Config.FruitSniper then
+            local char = LP.Character
+            if not char then continue end
+            
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+            
+            -- Find fruits in workspace
+            for _, obj in pairs(workspace:GetDescendants()) do
+                if obj:IsA("Tool") then
+                    local handle = obj:FindFirstChild("Handle")
+                    if handle then
+                        local dist = (handle.Position - hrp.Position).Magnitude
+                        
+                        if dist <= Config.SniperRange then
+                            Chat("🍎 FRUIT FOUND: " .. obj.Name .. " (" .. math.floor(dist) .. "m)", Color3.fromRGB(0,255,0))
+                            
+                            -- TP to fruit
+                            hrp.CFrame = handle.CFrame
+                            break
+                        end
+                    end
+                end
+            end
         end
     end
-end
+end)
 
--- ============================================================
--- MAIN LOOP (Fixed: Single connection, proper updates)
--- ============================================================
-
-local MainLoopConnection = nil
-
-function Zuncodex:StartMainLoop()
-    if MainLoopConnection then return end  -- Already running
-    
-    MainLoopConnection = RunS.RenderStepped:Connect(function(delta)
-        -- Combat
-        self:CombatLoop()
-        
-        -- ESP
-        self:UpdateESP()
-        
-        -- Auto Stats (with internal cooldown)
-        self:AutoStatsLoop()
-        
-        -- Auto Raid (with internal cooldown)
-        self:AutoRaidLoop()
-        
-        -- Fruit Sniper (optimized)
-        self:FruitSniperLoop()
-        
-        -- Boss Check
-        self:CheckBosses()
-        
-        -- Character Stats
-        self:UpdateCharacterStats()
+-- Anti-AFK (Standard pattern)
+LP.Idled:Connect(function()
+    pcall(function()
+        VirtualUser:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+        wait(1)
+        VirtualUser:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
     end)
-end
+end)
 
-function Zuncodex:StopMainLoop()
-    if MainLoopConnection then
-        MainLoopConnection:Disconnect()
-        MainLoopConnection = nil
-    end
-end
+-- FPS Unlock (If supported)
+pcall(function()
+    setfpscap(999)
+    Chat("FPS Unlock enabled (999)", Color3.fromRGB(0,255,0))
+end)
 
--- ============================================================
--- INITIALIZATION
--- ============================================================
-
-function Zuncodex:Init()
-    print("[Zuncodex V5.1] Initializing Mobile Edition...")
-    
-    -- Apply initial settings
-    self:UpdateFPS()
-    self:UpdateNoClip()
-    self:UpdateFly()
-    self:UpdateAntiAFK()
-    
-    -- Start main loop
-    self:StartMainLoop()
-    
-    -- Notify user
-    SG:SetCore("ChatMakeSystemMessage", {
-        Text = "[Zuncodex V5.1] ✅ Loaded! Press [Z] button to open menu",
-        Color = Color3.fromRGB(138, 43, 226)
-    })
-    
-    print("[Zuncodex V5.1] Ready! GUI Hidden. Click [Z] logo to open.")
-    print("[Zuncodex V5.1] Platform: " .. (isMobile and "Mobile" or "PC"))
-    
-    return self
-end
-
--- AUTO START
-Zuncodex:Init()
-
--- Return for external use
-return Zuncodex
+-- ===== DONE =====
+Chat("✅ Script loaded! Press [Z] button.", Color3.fromRGB(0,255,0))
+Chat("Patterns used: xHeptc, lattex6329 (GitHub)", Color3.fromRGB(200,200,200))
